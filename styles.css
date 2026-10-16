@@ -214,3 +214,19 @@ body.picking .card .star { display: none; }
 body.picking .card:not(.sel) img { opacity: .8; }
 #send-menu { position: fixed; z-index: 30; min-width: 240px; }
 @media (max-width: 599px) { #pick-bar { top: 92px; font-size: 13px; padding: 8px 10px; } #pick-bar button { padding: 0 10px; } }
+
+/* Conferir páginas escolhidas */
+#pick-dlg { border: 0; border-radius: 14px; padding: 20px; width: min(620px, 94vw); max-height: 86vh; }
+#pick-dlg::backdrop { background: rgba(0,0,0,.45); }
+#pick-dlg h2 { margin: 0 0 6px; font-size: 20px; }
+#pick-list { max-height: 55vh; overflow: auto; }
+.pick-row { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+.pick-row img { width: 54px; height: 76px; object-fit: contain; background: #f3f4f6; border-radius: 6px; flex: none; }
+.pick-row span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pick-row b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pick-row small { color: var(--muted); }
+.pick-row button { width: 36px; height: 36px; padding: 0; flex: none; }
+.pick-row button:disabled { opacity: .3; }
+#pick-go { background: #25d366; color: #fff; font-weight: 600; height: 38px; padding: 0 16px; }
+#pick-go:disabled { opacity: .45; }
+#pick-back { height: 38px; }

@@ -373,13 +373,47 @@ async function pickedFiles() {
 }
 const pickText = () => 'MS Brasil:\n' + picking.map((n) => '• ' + (pages[n - 1].titulo || 'página ' + pages[n - 1].pn)).join('\n');
 
-$('pick-send').onclick = async () => {
+// Antes de enviar/baixar: tela de conferência com as escolhidas (tirar e mudar a ordem)
+let pickAcao = 'enviar';
+function openPickReview(acao) {
+  pickAcao = acao;
+  $('pick-dlg-title').textContent = acao === 'enviar' ? 'Conferir antes de enviar' : 'Conferir antes de baixar';
+  $('pick-go').textContent = acao === 'enviar' ? `↗ Enviar ${picking.length}` : `⬇ Baixar ${picking.length}`;
+  $('pick-go').disabled = !picking.length;
+  const box = $('pick-list');
+  box.replaceChildren();
+  if (!picking.length) box.innerHTML = '<p class="muted">Nenhuma página escolhida.</p>';
+  picking.forEach((n, i) => {
+    const p = pages[n - 1];
+    const row = document.createElement('div');
+    row.className = 'pick-row';
+    const img = Object.assign(document.createElement('img'), { src: miniUrl(n), loading: 'lazy', alt: '' });
+    const txt = document.createElement('span');
+    txt.append(
+      Object.assign(document.createElement('b'), { textContent: `${i + 1}. ${p.titulo || 'Página ' + p.pn}` }),
+      Object.assign(document.createElement('small'), { textContent: isPromo(p) ? '🔥 Promoções' : `${bookOf(p).nome} · pág. ${p.pn}` }),
+    );
+    const move = (d) => () => { picking.splice(i, 1); picking.splice(i + d, 0, n); openPickReview(acao); };
+    const up = button('▲', '', move(-1)); up.disabled = i === 0;
+    const down = button('▼', '', move(1)); down.disabled = i === picking.length - 1;
+    const del = button('✕', 'danger', () => { picking.splice(i, 1); updatePickBar(); render(); openPickReview(acao); });
+    row.append(img, txt, up, down, del);
+    box.append(row);
+  });
+  if (!$('pick-dlg').open) $('pick-dlg').showModal();
+}
+$('pick-send').onclick = () => openPickReview('enviar');
+$('pick-down').onclick = () => openPickReview('baixar');
+$('pick-back').onclick = () => $('pick-dlg').close();
+$('pick-go').onclick = async () => {
+  $('pick-dlg').close();
   const files = await pickedFiles();
+  if (pickAcao === 'baixar') {
+    for (const f of files) download(f);
+    return;
+  }
   if (!navigator.canShare || !navigator.canShare({ files })) return toast('Este aparelho não permite compartilhar arquivos. Use "Baixar".');
   try { await navigator.share({ files, text: pickText() }); } catch {}
-};
-$('pick-down').onclick = async () => {
-  for (const f of await pickedFiles()) download(f);
 };
 $('pick-clear').onclick = () => { picking = []; updatePickBar(); render(); };
 $('pick-cancel').onclick = stopPicking;
