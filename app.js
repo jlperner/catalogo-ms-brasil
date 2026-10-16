@@ -42,13 +42,17 @@ async function init() {
       const res = await fetch('catalogos.json', { cache: 'no-cache' });
       if (res.ok) publicados = await res.json();
     } catch {}
-    const lista = (await Promise.all(publicados.map(async (b) => {
+    let lista = (await Promise.all(publicados.map(async (b) => {
       try {
         const r = await fetch(`catalogos/${b.id}/indice.json`, { cache: 'no-cache' });
         return r.ok ? { book: b, indice: await r.json() } : null;
       } catch { return null; }
     }))).filter(Boolean);
     lista.push(...(await loadLocalBooks()));
+    // nomes trocados e catálogos ocultados neste aparelho (⚙ Gerenciar catálogos)
+    for (const l of lista) l.book = { ...l.book, nomeOriginal: l.book.nome, nome: bookNames[l.book.id] || l.book.nome };
+    allBooks = lista.map((l) => l.book);
+    lista = lista.filter((l) => !hiddenBooks.has(l.book.id));
     books = lista.map((l) => l.book);
     pages = [];
     for (const { book, indice } of lista) {
@@ -60,7 +64,10 @@ async function init() {
         });
       }
     }
-    if (!pages.length) throw new Error('nenhum catálogo encontrado. Use ⬆ Importar para adicionar um PDF');
+    if (!pages.length) {
+      if (hiddenBooks.size) { fillBookBtn(); $('status').textContent = 'Todos os catálogos estão ocultos neste aparelho. Use 📚 → ⚙ Gerenciar catálogos para mostrar de novo.'; return; }
+      throw new Error('nenhum catálogo encontrado. Use ⬆ Importar para adicionar um PDF');
+    }
   } catch (e) {
     $('status').textContent = 'Não foi possível carregar o catálogo (' + e.message + ').';
     return;
@@ -94,8 +101,81 @@ function openBookMenu() {
   for (const b of catBooks()) {
     menu.append(button(`${b.nome}  (${b.paginas} pág.)${b.local ? '  · importado' : ''}`, b.id === bookFilter ? 'on' : '', () => pickBook(b.id)));
   }
+  menu.append(button('⚙ Gerenciar catálogos…', 'menu-act', () => { menu.hidden = true; openBooksDialog(); }));
   menu.hidden = false;
 }
+
+// ---- ⚙ Gerenciar catálogos (renomear / excluir neste aparelho) ----
+// Importados: excluir apaga de verdade. Publicados: excluir oculta neste aparelho (e apaga a cópia offline),
+// porque o tablet não consegue apagar do site; dá para mostrar de novo na lista de ocultos.
+let allBooks = [];
+let hiddenBooks = new Set(), bookNames = {};
+try { hiddenBooks = new Set(JSON.parse(localStorage.getItem('hiddenBooks') || '[]')); } catch {}
+try { bookNames = JSON.parse(localStorage.getItem('bookNames') || '{}'); } catch {}
+const saveBookPrefs = () => {
+  try {
+    localStorage.setItem('hiddenBooks', JSON.stringify([...hiddenBooks]));
+    localStorage.setItem('bookNames', JSON.stringify(bookNames));
+  } catch {}
+};
+
+function openBooksDialog() {
+  const box = $('books-list');
+  box.replaceChildren();
+  for (const b of allBooks.filter((x) => x.tipo !== 'promo' && !hiddenBooks.has(x.id))) {
+    const row = document.createElement('div');
+    row.className = 'cat-row';
+    const nome = Object.assign(document.createElement('b'), { textContent: b.nome });
+    const info = Object.assign(document.createElement('span'), {
+      className: 'muted',
+      textContent: `${b.paginas} pág.${b.local ? ' · importado' : ''}${b.nome !== b.nomeOriginal ? ' · nome original: ' + b.nomeOriginal : ''}`,
+    });
+    const ren = button('Renomear', '', () => {
+      const input = Object.assign(document.createElement('input'), { value: b.nome, className: 'cat-rename' });
+      const ok = button('OK', 'pri', () => {
+        const novo = input.value.trim();
+        if (novo && novo !== b.nomeOriginal) bookNames[b.id] = novo; else delete bookNames[b.id];
+        saveBookPrefs();
+        location.reload();
+      });
+      input.onkeydown = (e) => { if (e.key === 'Enter') ok.onclick(); };
+      row.replaceChildren(input, ok, button('Cancelar', '', openBooksDialog));
+      input.focus();
+      input.select();
+    });
+    const del = button('Excluir', 'danger', async () => {
+      if (!del.dataset.armed) { del.dataset.armed = '1'; del.textContent = b.local ? 'Apagar de vez?' : 'Ocultar?'; return; }
+      if (b.local) {
+        await removeLocalBook(b.id);
+      } else {
+        hiddenBooks.add(b.id);
+        saveBookPrefs();
+        if ('caches' in window) await caches.delete('off-' + b.id);
+        const st = offState(); delete st[b.id]; setOffState(st);
+      }
+      if (bookFilter === b.id) { try { localStorage.setItem('book', ''); } catch {} }
+      location.reload();
+    });
+    row.append(nome, info, ren, del);
+    box.append(row);
+  }
+  const ocultos = allBooks.filter((x) => hiddenBooks.has(x.id));
+  const hid = $('books-hidden');
+  hid.replaceChildren();
+  if (ocultos.length) {
+    hid.append(Object.assign(document.createElement('p'), { className: 'muted', textContent: 'Ocultos neste aparelho:' }));
+    for (const b of ocultos) {
+      const row = Object.assign(document.createElement('div'), { className: 'cat-row' });
+      row.append(
+        Object.assign(document.createElement('b'), { textContent: b.nome }),
+        button('Mostrar de novo', 'pri', () => { hiddenBooks.delete(b.id); saveBookPrefs(); location.reload(); }),
+      );
+      hid.append(row);
+    }
+  }
+  if (!$('books-dlg').open) $('books-dlg').showModal();
+}
+$('books-close').onclick = () => $('books-dlg').close();
 $('book-btn').onclick = (e) => { e.stopPropagation(); $('book-menu').hidden ? openBookMenu() : ($('book-menu').hidden = true); };
 document.addEventListener('click', (e) => { if (!$('book-menu').contains(e.target)) $('book-menu').hidden = true; });
 

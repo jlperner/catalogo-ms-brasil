@@ -230,3 +230,11 @@ body.picking .card:not(.sel) img { opacity: .8; }
 #pick-go { background: #25d366; color: #fff; font-weight: 600; height: 38px; padding: 0 16px; }
 #pick-go:disabled { opacity: .45; }
 #pick-back { height: 38px; }
+
+/* Gerenciar catálogos */
+#books-dlg { border: 0; border-radius: 14px; padding: 20px; width: min(680px, 94vw); }
+#books-dlg::backdrop { background: rgba(0,0,0,.45); }
+#books-dlg h2 { margin: 0 0 6px; font-size: 20px; }
+#books-dlg .cat-row b { flex: 1 1 200px; }
+#books-dlg .cat-row .muted { flex: 1 1 100%; order: 1; }
+#books-hidden { margin-top: 14px; }
