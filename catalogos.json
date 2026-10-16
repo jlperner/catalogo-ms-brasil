@@ -26,5 +26,13 @@
   "paginas": 27,
   "assinatura": "61979065-1792116997",
   "mb": 23.0
+ },
+ {
+  "id": "promocoes",
+  "nome": "Promoções",
+  "tipo": "promo",
+  "paginas": 20,
+  "mb": 21.4,
+  "assinatura": "7be64fc6fcc6"
  }
 ]

@@ -14,8 +14,15 @@ let mode = 'all', current = 1;
 const bookById = (id) => books.find((b) => b.id === id);
 const bookOf = (p) => bookById(p.book);
 const pageKey = (p) => `${p.book}:${p.pn}`;
+// Promoções são catálogos do tipo "promo": ficam fora de "Todos os catálogos" e abrem pelo botão 🔥
+const PROMO = '__promo';
+const isPromo = (p) => p.tipo === 'promo';
+const catBooks = () => books.filter((b) => b.tipo !== 'promo');
+const promoBooks = () => books.filter((b) => b.tipo === 'promo');
 // Páginas do catálogo escolhido (ou de todos), na ordem em que o visualizador passa por elas
-const seq = () => (bookFilter ? pages.filter((p) => p.book === bookFilter) : pages);
+const seq = () => (bookFilter === PROMO ? pages.filter(isPromo)
+  : bookFilter ? pages.filter((p) => p.book === bookFilter)
+  : pages.filter((p) => !isPromo(p)));
 
 // Favoritos guardados por catálogo + página, para não mudarem quando entrar um catálogo novo
 let favs = new Set();
@@ -47,7 +54,8 @@ async function init() {
     for (const { book, indice } of lista) {
       for (const p of indice) {
         pages.push({
-          n: pages.length + 1, book: book.id, pn: p.pn, titulo: p.titulo, texto: p.texto,
+          n: pages.length + 1, book: book.id, tipo: book.tipo || '', arquivo: p.arquivo,
+          pn: p.pn, titulo: p.titulo, texto: p.texto,
           ntitulo: norm(p.titulo).replace(/[^a-z0-9]+/g, ' '), ntexto: norm(p.texto),
         });
       }
@@ -58,7 +66,7 @@ async function init() {
     return;
   }
   try { bookFilter = localStorage.getItem('book') || ''; } catch {}
-  if (!bookById(bookFilter)) bookFilter = '';
+  if (bookFilter === PROMO ? !promoBooks().length : !bookById(bookFilter)) bookFilter = '';
   fillBookBtn();
   loadCats();
   render();
@@ -66,9 +74,10 @@ async function init() {
 
 // ---- 📚 Escolher catálogo ----
 function fillBookBtn() {
-  const b = bookById(bookFilter);
-  $('book-btn').textContent = `📚 ${b ? b.nome : books.length > 1 ? 'Todos os catálogos' : (books[0]?.nome || 'Catálogo')} ▾`;
-  $('book-btn').classList.toggle('active-cat', !!b && books.length > 1);
+  const b = bookById(bookFilter), cb = catBooks();
+  $('book-btn').textContent = `📚 ${b && !b.tipo ? b.nome : cb.length > 1 ? 'Todos os catálogos' : (cb[0]?.nome || 'Catálogo')} ▾`;
+  $('book-btn').classList.toggle('active-cat', !!b && !b.tipo && cb.length > 1);
+  $('promo-btn').classList.toggle('promo-on', bookFilter === PROMO);
 }
 function pickBook(id) {
   bookFilter = id;
@@ -80,8 +89,9 @@ function pickBook(id) {
 }
 function openBookMenu() {
   const menu = $('book-menu');
-  menu.replaceChildren(button(`Todos os catálogos  (${pages.length} pág.)`, bookFilter ? '' : 'on', () => pickBook('')));
-  for (const b of books) {
+  const total = pages.filter((p) => !isPromo(p)).length;
+  menu.replaceChildren(button(`Todos os catálogos  (${total} pág.)`, bookFilter ? '' : 'on', () => pickBook('')));
+  for (const b of catBooks()) {
     menu.append(button(`${b.nome}  (${b.paginas} pág.)${b.local ? '  · importado' : ''}`, b.id === bookFilter ? 'on' : '', () => pickBook(b.id)));
   }
   menu.hidden = false;
@@ -100,15 +110,17 @@ function render() {
   if (q) list = list.filter((p) => q.split(/\s+/).every((w) =>
     conteudo ? (p.ntitulo + ' ' + p.ntexto).includes(w)
              : (/\d/.test(w) ? ' ' + p.ntexto : ' ' + p.ntitulo).includes(' ' + w)));
-  $('status').textContent = q || mode === 'fav' || catFilter ? `${list.length} página(s) encontrada(s)` : `${list.length} páginas`;
+  const un = bookFilter === PROMO ? ['promoção(ões)', 'promoções'] : ['página(s)', 'páginas'];
+  $('status').textContent = q || mode === 'fav' || catFilter ? `${list.length} ${un[0]} encontrada(s)` : `${list.length} ${un[1]}`;
 
-  const showBook = books.length > 1 && !bookFilter;
+  const showBook = catBooks().length > 1 && !bookFilter;
   const grid = $('grid');
   grid.innerHTML = '';
   if (!list.length) {
     $('status').textContent = '';
     grid.innerHTML = `<div class="empty">${mode === 'fav' && !q
       ? 'Nenhum favorito ainda. Toque na ☆ de uma página para guardar aqui.'
+      : bookFilter === PROMO && !q ? 'Nenhuma promoção no momento. Use ⬆ Importar para adicionar.'
       : catFilter && !q ? 'Esta categoria ainda não tem páginas. Use ⚙ → Escolher páginas.'
       : 'Nada encontrado. Tente outra palavra, mude para "Conteúdo da ficha" ou escolha "Todos os catálogos" em 📚.'}</div>`;
   }
@@ -116,7 +128,7 @@ function render() {
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `<img loading="lazy" src="${miniUrl(p.n)}" alt="">
-      <div class="info"><b>Pág. ${p.pn}</b> ${esc(p.titulo)}${showBook ? `<div class="book">${esc(bookOf(p).nome)}</div>` : ''}${q ? `<div class="snip">${snippet(p, q)}</div>` : ''}</div>`;
+      <div class="info">${isPromo(p) ? `<b>${esc(p.titulo)}</b>` : `<b>Pág. ${p.pn}</b> ${esc(p.titulo)}`}${showBook ? `<div class="book">${esc(bookOf(p).nome)}</div>` : ''}${q ? `<div class="snip">${snippet(p, q)}</div>` : ''}</div>`;
     const star = document.createElement('button');
     star.className = 'star';
     star.textContent = isFav(p.n) ? '★' : '☆';
@@ -153,7 +165,9 @@ try { leitura = localStorage.getItem('leitura') || 'uma'; } catch {}
 function setCurrent(n) {
   current = n;
   const p = pages[n - 1], b = bookOf(p), s = seq(), i = s.indexOf(p);
-  $('v-title').textContent = `${books.length > 1 ? b.nome + ' · ' : ''}Página ${p.pn} de ${b.paginas} — ${p.titulo}`;
+  $('v-title').textContent = isPromo(p)
+    ? `🔥 ${p.titulo} (${i + 1} de ${s.length})`
+    : `${catBooks().length > 1 ? b.nome + ' · ' : ''}Página ${p.pn} de ${b.paginas} — ${p.titulo}`;
   $('v-fav').textContent = isFav(n) ? '★' : '☆';
   $('side-prev').disabled = i <= 0;
   $('side-next').disabled = i < 0 || i >= s.length - 1;
@@ -253,11 +267,15 @@ $('v-wrap').addEventListener('touchend', (e) => {
 
 const label = () => {
   const p = pages[current - 1];
-  return `${p.titulo} — página ${p.pn} do catálogo ${bookOf(p).nome}`;
+  return isPromo(p) ? `Promoção MS Brasil: ${p.titulo}` : `${p.titulo} — página ${p.pn} do catálogo ${bookOf(p).nome}`;
 };
+// Arquivo da página para enviar/baixar. Promoção em imagem vai como imagem; o resto como PDF.
 const pageFile = async () => {
   const p = pages[current - 1];
-  return asPdf(await pageBlob(current), `${p.titulo || bookOf(p).nome + ' - pagina ' + p.pn}.pdf`);
+  const blob = await pageBlob(current);
+  const nome = (p.titulo || bookOf(p).nome + ' - pagina ' + p.pn).replace(/[\\/:*?"<>|]/g, '-');
+  if (blob.type.startsWith('image/')) return new File([blob], `${nome}.${blob.type === 'image/png' ? 'png' : 'jpg'}`, { type: blob.type });
+  return asPdf(blob, nome + '.pdf');
 };
 
 $('v-zap').onclick = async () => {
@@ -276,7 +294,9 @@ $('v-down').onclick = async () => download(await pageFile());
 
 // Enviar/Baixar do topo: o catálogo escolhido em 📚 (ou o único que existir)
 function chosenBook() {
-  const b = bookById(bookFilter) || (books.length === 1 ? books[0] : null);
+  const cb = catBooks();
+  const b = bookFilter === PROMO ? (promoBooks().find((x) => !x.local) || promoBooks()[0])
+    : bookById(bookFilter) || (cb.length === 1 ? cb[0] : null);
   if (!b) { toast('Escolha um catálogo em 📚 para enviar ou baixar.'); openBookMenu(); }
   return b;
 }
@@ -526,85 +546,9 @@ $('edit-done').onclick = () => {
 };
 
 // ---- Promoções ----
-// Junta os panfletos publicados (pasta promocoes/, gerados pelo preparar.py) com os importados
-// neste tablet (local.js). Ao abrir um, aparecem as imagens e os botões para enviar ou baixar.
-let promos = [], promo = null;
-
-async function loadPromos() {
-  let publicadas = [];
-  try {
-    const res = await fetch('promocoes/promocoes.json', { cache: 'no-cache' });
-    if (res.ok) publicadas = (await res.json()).map((p) => ({
-      nome: p.nome,
-      imgs: p.imagens.map((i) => 'promocoes/' + i),
-      file: async () => {
-        const blob = await (await fetch('promocoes/' + p.arquivo)).blob();
-        return new File([blob], p.baixar, { type: blob.type });
-      },
-    }));
-  } catch {}
-  return [...(await localPromos()), ...publicadas];
-}
-
-async function openPromos() {
-  promo = null;
-  $('promo-view').hidden = false;
-  showPromoButtons(false);
-  $('promo-title').textContent = '🔥 Promoções';
-  const body = $('promo-body');
-  body.className = 'promo-grid';
-  body.innerHTML = '<p class="promo-empty">Carregando…</p>';
-  promos = await loadPromos();
-  body.innerHTML = promos.length ? '' : '<p class="promo-empty">Nenhuma promoção no momento. Use ⬆ Importar para adicionar.</p>';
-  for (const p of promos) {
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.innerHTML = `<img loading="lazy" src="${p.imgs[0]}" alt=""><div class="info"><b>${esc(p.nome)}</b>${p.local ? '<div class="snip">Importada neste tablet</div>' : ''}</div>`;
-    card.onclick = () => openPromo(p);
-    body.append(card);
-  }
-}
-
-function openPromo(p) {
-  promo = p;
-  showPromoButtons(true);
-  $('promo-del').hidden = !p.local;
-  $('promo-del').textContent = 'Remover';
-  delete $('promo-del').dataset.armed;
-  $('promo-title').textContent = '🔥 ' + p.nome;
-  const body = $('promo-body');
-  body.className = 'promo-pages';
-  body.replaceChildren(...p.imgs.map((src) => Object.assign(document.createElement('img'), { src, loading: 'lazy' })));
-  body.scrollTo(0, 0);
-}
-
-function showPromoButtons(on) {
-  for (const id of ['promo-zap', 'promo-mail', 'promo-share', 'promo-down', 'promo-del']) $(id).hidden = !on;
-}
-
-const promoFile = () => promo.file();
-const promoText = () => `Promoção MS Brasil: ${promo.nome}`;
-
-$('promo-del').onclick = async () => {
-  const b = $('promo-del');
-  if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'Confirmar?'; return; }
-  await removePromo(promo.local);
-  toast(`Promoção "${promo.nome}" removida.`);
-  openPromos();
-};
-$('promo-btn').onclick = openPromos;
-$('promo-back').onclick = () => (promo ? openPromos() : ($('promo-view').hidden = true));
-$('promo-zap').onclick = async () => {
-  if (!(await shareFile(await promoFile(), promoText())))
-    window.open('https://wa.me/?text=' + encodeURIComponent(promoText()), '_blank');
-};
-$('promo-mail').onclick = () => {
-  location.href = 'mailto:?subject=' + encodeURIComponent(promoText()) + '&body=' + encodeURIComponent(promoText());
-};
-$('promo-share').onclick = async () => {
-  if (!(await shareFile(await promoFile(), promoText()))) toast('Este aparelho não permite compartilhar arquivos. Use "Baixar".');
-};
-$('promo-down').onclick = async () => download(await promoFile());
+// As promoções são um catálogo do tipo "promo" (ver preparar.py e local.js), com as mesmas opções dos outros.
+// O botão 🔥 liga e desliga a visão das promoções.
+$('promo-btn').onclick = () => pickBook(bookFilter === PROMO ? '' : PROMO);
 
 // ---- Busca e abas ----
 let t;

@@ -3,7 +3,7 @@
 // Na instalação o app já guarda a tela, a lista de catálogos e os índices de busca, para abrir sem
 // internet mesmo que a pessoa só tenha aberto uma vez. As páginas ficam a cargo de "Usar sem internet"
 // (caches off-*, ver local.js).
-const CACHE = 'catalogo-v25';
+const CACHE = 'catalogo-v26';
 const APP = ['./', 'index.html', 'app.js', 'local.js', 'styles.css', 'manifest.json', 'icon.svg', 'catalogos.json'];
 
 async function precache() {
@@ -12,7 +12,6 @@ async function precache() {
   try {
     const lista = await (await fetch('catalogos.json', { cache: 'no-cache' })).json();
     await cache.addAll(lista.map((b) => new Request(`catalogos/${b.id}/indice.json`, { cache: 'no-cache' })));
-    await cache.add(new Request('promocoes/promocoes.json', { cache: 'no-cache' }));
   } catch {}
 }
 

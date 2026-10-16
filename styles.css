@@ -193,3 +193,6 @@ header .row + .row .cat-wrap { flex-shrink: 1; }
 .off-row span { display: flex; flex-direction: column; }
 .off-row small { color: var(--muted); }
 .off-row small.off-old { color: #b45309; font-weight: 600; }
+
+/* 🔥 ligado: mostrando as promoções */
+#promo-btn.promo-on { background: #fff; color: #c2410c; box-shadow: inset 0 0 0 2px #f97316; }

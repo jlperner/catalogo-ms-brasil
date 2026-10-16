@@ -61,7 +61,7 @@
   <h2>Importar e offline</h2>
   <p class="muted">Escolha um PDF salvo no tablet (por exemplo, recebido pelo WhatsApp e salvo em Arquivos). Fica só neste tablet e funciona sem internet.</p>
   <button id="imp-cat-btn" class="imp-opt"><b>📘 Catálogo</b><span>PDF — entra como mais um catálogo em 📚</span></button>
-  <button id="imp-promo-btn" class="imp-opt"><b>🔥 Promoção</b><span>PDF ou imagem — entra na lista de promoções</span></button>
+  <button id="imp-promo-btn" class="imp-opt"><b>🔥 Promoção</b><span>PDF ou imagem — entra nas promoções 🔥</span></button>
   <button id="off-btn" class="imp-opt"><b>📥 Usar sem internet</b><span id="off-info"></span></button>
   <div id="imp-books"></div>
   <div class="dlg-foot"><span></span><button id="imp-close">Fechar</button></div>
@@ -90,19 +90,6 @@
   <div id="status">Carregando catálogo…</div>
   <div id="grid"></div>
 </main>
-
-<div id="promo-view" hidden>
-  <div class="vbar">
-    <button id="promo-back">✕<span class="ptxt"> Fechar</span></button>
-    <span id="promo-title">🔥 Promoções</span>
-    <button id="promo-zap" class="zap" hidden>WhatsApp</button>
-    <button id="promo-mail" hidden>✉<span class="ptxt"> E-mail</span></button>
-    <button id="promo-share" hidden>↗<span class="ptxt"> Enviar</span></button>
-    <button id="promo-down" hidden>⬇<span class="ptxt"> Baixar</span></button>
-    <button id="promo-del" class="danger" hidden>Remover</button>
-  </div>
-  <div id="promo-body"></div>
-</div>
 
 <div id="viewer" hidden>
   <div class="vbar">

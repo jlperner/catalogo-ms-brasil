@@ -65,7 +65,8 @@ const localAssets = {}; // id → { telas: [Blob], telaUrls: [url], minis: [url]
 
 async function loadLocalBooks() {
   try {
-    idbDelPrefix('cat/').catch(() => {}); // restos da versão antiga (um catálogo importado só)
+    idbDelPrefix('cat/').catch(() => {});   // restos de versões antigas
+    idbDelPrefix('promo/').catch(() => {});
     const list = (await idbGet('books')) || [];
     return await Promise.all(list.map(async (b) => {
       const indice = await idbGet(`book/${b.id}/indice`);
@@ -94,8 +95,11 @@ function telaUrl(n) {
 
 async function pageBlob(n) {
   const p = pages[n - 1];
-  if (localAssets[p.book]) return pdfFromJpgs([localAssets[p.book].telas[p.pn - 1]]);
-  return (await fetch(`catalogos/${p.book}/paginas/${p.pn}.pdf`)).blob();
+  if (localAssets[p.book]) {
+    const original = await idbGet(`book/${p.book}/arq/${p.pn}`); // promoção em imagem: o arquivo original
+    return original || pdfFromJpgs([localAssets[p.book].telas[p.pn - 1]]);
+  }
+  return (await fetch(`catalogos/${p.book}/paginas/${p.arquivo || p.pn + '.pdf'}`)).blob();
 }
 async function catalogBlob(id) {
   if (localAssets[id]) return pdfFromJpgs(localAssets[id].telas);
@@ -225,73 +229,77 @@ async function removeLocalBook(id) {
   await idbDelPrefix(`book/${id}/`);
 }
 
-// ---- Promoções locais ----
-async function localPromos() {
-  const list = (await idbGet('promo/list').catch(() => null)) || [];
-  return Promise.all(list.map(async (p) => {
-    const imgs = await Promise.all(Array.from({ length: p.paginas }, (_, j) => idbGet(`promo/${p.id}/img/${j + 1}`)));
-    return {
-      nome: p.nome,
-      local: p.id,
-      imgs: imgs.map((b) => URL.createObjectURL(b)),
-      file: async () => new File([await idbGet(`promo/${p.id}/file`)], p.baixar, { type: p.tipo }),
-    };
-  }));
+// ---- Promoções importadas neste tablet ----
+// Cada arquivo importado vira um catálogo local do tipo "promo" (aparece no 🔥 junto com as publicadas),
+// com as mesmas opções dos catálogos. Imagem: guarda também o arquivo original, que é o que vai no envio.
+async function imageToJpgs(file) {
+  const bmp = await createImageBitmap(file);
+  const tela = document.createElement('canvas');
+  tela.width = TELA_W;
+  tela.height = Math.round(bmp.height * (TELA_W / bmp.width));
+  tela.getContext('2d').drawImage(bmp, 0, 0, tela.width, tela.height);
+  const mini = document.createElement('canvas');
+  mini.width = MINI_W;
+  mini.height = Math.round(bmp.height * (MINI_W / bmp.width));
+  mini.getContext('2d').drawImage(bmp, 0, 0, mini.width, mini.height);
+  return { tela: await toJpg(tela, 0.82), mini: await toJpg(mini, 0.7) };
 }
 
 async function importPromo(file) {
-  const id = Date.now().toString(36);
   const nome = file.name.replace(/\.[^.]+$/, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
-  let paginas = 0;
-  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
-    const pdf = await openPdf(file);
-    for (let j = 1; j <= pdf.numPages; j++) {
-      progress(`Processando ${nome}: página ${j} de ${pdf.numPages}…`, (j - 1) / pdf.numPages);
-      const page = await pdf.getPage(j);
-      const { tela } = await renderPage(page, TELA_W);
-      await idbSet(`promo/${id}/img/${j}`, tela);
-      page.cleanup();
+  const antes = (await idbGet('books')) || [];
+  if (antes.some((b) => b.tipo === 'promo' && b.nome === nome && b.tamanho === file.size)) return 'igual';
+  const anterior = antes.find((b) => b.tipo === 'promo' && b.nome === nome);
+  const id = 'localpromo-' + Date.now().toString(36);
+  let total = 1;
+  try {
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      const pdf = await openPdf(file);
+      total = pdf.numPages;
+      for (let j = 1; j <= total; j++) {
+        progress(`Processando ${nome}: página ${j} de ${total}…`, (j - 1) / total);
+        const page = await pdf.getPage(j);
+        const { tela, mini } = await renderPage(page, TELA_W, MINI_W);
+        await idbSet(`book/${id}/tela/${j}`, tela);
+        await idbSet(`book/${id}/mini/${j}`, mini);
+        page.cleanup();
+      }
+      pdf.destroy();
+    } else {
+      progress(`Salvando ${nome}…`, 0.5);
+      const { tela, mini } = await imageToJpgs(file);
+      await idbSet(`book/${id}/tela/1`, tela);
+      await idbSet(`book/${id}/mini/1`, mini);
+      await idbSet(`book/${id}/arq/1`, file);
     }
-    paginas = pdf.numPages;
-    pdf.destroy();
-  } else {
-    progress(`Salvando ${nome}…`, 0.5);
-    await idbSet(`promo/${id}/img/1`, file);
-    paginas = 1;
+  } catch (e) {
+    await idbDelPrefix(`book/${id}/`);
+    throw e;
   }
-  await idbSet(`promo/${id}/file`, file);
-  const list = (await idbGet('promo/list')) || [];
-  list.push({ id, nome, baixar: file.name, tipo: file.type || 'application/pdf', paginas });
-  await idbSet('promo/list', list);
-}
-
-async function removePromo(id) {
-  const list = ((await idbGet('promo/list')) || []).filter((p) => p.id !== id);
-  await idbSet('promo/list', list);
-  await idbDelPrefix(`promo/${id}/`);
+  const indice = Array.from({ length: total }, (_, i) => ({
+    pn: i + 1, titulo: total > 1 ? `${nome} (${i + 1}/${total})` : nome, texto: nome,
+  }));
+  await idbSet(`book/${id}/indice`, indice);
+  await idbSet('books', [...((await idbGet('books')) || []), { id, nome, paginas: total, tamanho: file.size, tipo: 'promo' }]);
+  if (anterior) await removeLocalBook(anterior.id);
+  return anterior ? 'atualizado' : 'novo';
 }
 
 // ---- Escolher o que fica disponível offline ----
-// Cada catálogo publicado vai para um cache próprio (off-<id>), as promoções para off-promocoes e o app
+// Cada catálogo publicado (inclusive as promoções, que também são um catálogo) vai para um cache próprio (off-<id>), e o app
 // para off-app. Assim dá para baixar só os catálogos que a pessoa usa e apagar um sem mexer nos outros.
 // O service worker (sw.js) procura em todos os caches, então o que foi baixado abre sem internet.
 const OFF_KEY = 'offline2'; // { id: 'dd/mm/aaaa' } do que já foi baixado
 function offState() { try { return JSON.parse(localStorage.getItem(OFF_KEY) || '{}'); } catch { return {}; } }
 function setOffState(s) { try { localStorage.setItem(OFF_KEY, JSON.stringify(s)); } catch {} }
 
-async function promoUrls() {
-  try {
-    const res = await fetch('promocoes/promocoes.json', { cache: 'no-cache' });
-    if (!res.ok) return [];
-    const urls = ['promocoes/promocoes.json'];
-    for (const p of await res.json()) urls.push('promocoes/' + p.arquivo, ...p.imagens.map((i) => 'promocoes/' + i));
-    return urls;
-  } catch { return []; }
-}
 function bookUrls(b) {
   const base = `catalogos/${b.id}/`;
-  const urls = [base + 'indice.json', base + 'catalogo.pdf'];
-  for (let pn = 1; pn <= b.paginas; pn++) urls.push(`${base}miniaturas/${pn}.jpg`, `${base}telas/${pn}.jpg`, `${base}paginas/${pn}.pdf`);
+  const urls = [base + 'indice.json'];
+  if (b.paginas) urls.push(base + 'catalogo.pdf');
+  for (const p of pages) {
+    if (p.book === b.id) urls.push(`${base}miniaturas/${p.pn}.jpg`, `${base}telas/${p.pn}.jpg`, `${base}paginas/${p.arquivo || p.pn + '.pdf'}`);
+  }
   return urls;
 }
 
@@ -315,29 +323,19 @@ async function fillCache(name, urls, label, done, total) {
   return falhas;
 }
 
-// Versão de cada item, para saber se o que está no aparelho ainda é o atual.
-// Catálogo: a assinatura do PDF (preparar.py). Promoções: um resumo do promocoes.json.
-let promoVersion = '';
-async function itemVersion(id) {
-  if (id !== 'promocoes') return bookById(id)?.assinatura || '';
-  try {
-    const t = await (await fetch('promocoes/promocoes.json', { cache: 'no-cache' })).text();
-    let h = 0;
-    for (const c of t) h = (h * 31 + c.charCodeAt(0)) | 0;
-    return `${t.length}-${h}`;
-  } catch { return promoVersion; }
-}
+// Versão de cada item (assinatura gerada pelo preparar.py), para saber se o que está no aparelho ainda é o atual
+const itemVersion = (id) => bookById(id)?.assinatura || '';
 // state[id] = { data, v }  (versões antigas do app guardavam só a data)
 const offData = (x) => (typeof x === 'string' ? x : x?.data);
 const offAtual = (x, v) => !!x && typeof x === 'object' && !!v && x.v === v;
 
 async function openOfflineDialog() {
   const state = offState();
-  promoVersion = await itemVersion('promocoes');
   const box = document.getElementById('off-list');
   box.replaceChildren();
-  const itens = books.filter((b) => !b.local).map((b) => ({ id: b.id, nome: b.nome, mb: b.mb || Math.round(b.paginas * 0.6) }));
-  itens.push({ id: 'promocoes', nome: '🔥 Promoções', mb: 7 });
+  const itens = books.filter((b) => !b.local).map((b) => ({
+    id: b.id, nome: b.tipo === 'promo' ? '🔥 ' + b.nome : b.nome, mb: b.mb || Math.round(b.paginas * 0.6),
+  }));
   for (const it of itens) {
     const row = document.createElement('label');
     row.className = 'off-row';
@@ -346,7 +344,7 @@ async function openOfflineDialog() {
     cb.dataset.mb = it.mb;
     const txt = document.createElement('span');
     const nome = Object.assign(document.createElement('b'), { textContent: it.nome });
-    const v = it.id === 'promocoes' ? promoVersion : bookById(it.id).assinatura;
+    const v = itemVersion(it.id);
     const info = Object.assign(document.createElement('small'), {
       textContent: !state[it.id] ? `${Math.round(it.mb)} MB`
         : offAtual(state[it.id], v) ? `${Math.round(it.mb)} MB · baixado em ${offData(state[it.id])} · em dia`
@@ -380,18 +378,18 @@ async function saveOffline() {
     }
     // Marcados: baixa só o que ainda não está no aparelho ou mudou desde o último download
     const versoes = {};
-    for (const [id, on] of marcados) if (on) versoes[id] = await itemVersion(id);
+    for (const [id, on] of marcados) if (on) versoes[id] = itemVersion(id);
     const baixar = marcados.filter(([id, on]) => on && !offAtual(state[id], versoes[id])).map(([id]) => id);
     emDia = marcados.filter(([, on]) => on).length - baixar.length;
     baixados = baixar.length;
     if (baixar.length) {
       const listas ={ app: ['./', 'index.html', 'app.js', 'local.js', 'styles.css', 'manifest.json', 'icon.svg', 'catalogos.json'] };
-      for (const id of baixar) listas[id] = id === 'promocoes' ? await promoUrls() : bookUrls(bookById(id));
+      for (const id of baixar) listas[id] = bookUrls(bookById(id));
       const total = Object.values(listas).reduce((t, l) => t + l.length, 0);
       const done = { n: 0 };
       progress('Preparando…', 0);
       for (const [id, urls] of Object.entries(listas)) {
-        const nome = id === 'app' ? 'App' : id === 'promocoes' ? 'Promoções' : bookById(id).nome;
+        const nome = id === 'app' ? 'App' : bookById(id).nome;
         await caches.delete('off-' + id); // começa limpo: tira páginas que saíram do catálogo
         falhas += await fillCache('off-' + id, urls, nome, done, total);
         if (id !== 'app') state[id] = { data: hoje, v: versoes[id] };
@@ -437,10 +435,16 @@ async function runImport(kind, file) {
       progress(r === 'atualizado' ? 'Pronto! Versão anterior substituída. Abrindo…' : 'Pronto! Abrindo o catálogo importado…', 1);
       location.reload();
     } else {
-      await importPromo(file);
-      progressDone();
-      toast(`Promoção "${file.name}" importada.`);
-      openPromos();
+      const r = await importPromo(file);
+      if (r === 'igual') {
+        progressDone();
+        toast(`"${file.name}" já está nas promoções deste tablet.`);
+        pickBook(PROMO);
+        return;
+      }
+      try { localStorage.setItem('book', PROMO); } catch {} // abre já nas promoções
+      progress(r === 'atualizado' ? 'Pronto! Versão anterior substituída. Abrindo…' : 'Pronto! Abrindo as promoções…', 1);
+      location.reload();
     }
   } catch (e) {
     progressDone();
@@ -454,12 +458,14 @@ function openImportDialog() {
   const locais = books.filter((b) => b.local);
   box.replaceChildren();
   if (locais.length) {
-    const h = Object.assign(document.createElement('p'), { className: 'muted', textContent: 'Catálogos importados neste tablet:' });
+    const h = Object.assign(document.createElement('p'), { className: 'muted', textContent: 'Importados neste tablet:' });
     box.append(h);
   }
   for (const b of locais) {
     const row = Object.assign(document.createElement('div'), { className: 'cat-row' });
-    const name = Object.assign(document.createElement('b'), { textContent: `${b.nome} (${b.paginas} pág.)` });
+    const name = Object.assign(document.createElement('b'), {
+      textContent: b.tipo === 'promo' ? `🔥 ${b.nome}` : `${b.nome} (${b.paginas} pág.)`,
+    });
     const del = button('Remover', 'danger', async () => {
       if (!del.dataset.armed) { del.dataset.armed = '1'; del.textContent = 'Confirmar?'; return; }
       await removeLocalBook(b.id);
