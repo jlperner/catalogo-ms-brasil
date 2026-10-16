@@ -57,10 +57,11 @@
 <div id="toast"></div>
 
 <dialog id="imp-dlg">
-  <h2>Importar arquivo</h2>
+  <h2>Importar e offline</h2>
   <p class="muted">Escolha um PDF salvo no tablet (por exemplo, recebido pelo WhatsApp e salvo em Arquivos). Fica só neste tablet e funciona sem internet.</p>
   <button id="imp-cat-btn" class="imp-opt"><b>📘 Catálogo</b><span>PDF — substitui o catálogo deste tablet</span></button>
   <button id="imp-promo-btn" class="imp-opt"><b>🔥 Promoção</b><span>PDF ou imagem — entra na lista de promoções</span></button>
+  <button id="off-btn" class="imp-opt"><b>📥 Baixar tudo para usar offline</b><span id="off-info"></span></button>
   <p id="imp-info" class="muted"></p>
   <div class="dlg-foot"><button id="imp-reset" class="danger" hidden>Voltar ao catálogo original</button><button id="imp-close">Fechar</button></div>
   <input id="imp-cat" type="file" accept="application/pdf,.pdf" hidden>

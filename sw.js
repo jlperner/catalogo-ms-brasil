@@ -1,6 +1,6 @@
 // App e índice: rede primeiro (pega o catálogo atualizado); sem internet, usa o que está salvo.
 // Imagens das páginas: mostra na hora a cópia salva e atualiza em segundo plano.
-const CACHE = 'catalogo-v20';
+const CACHE = 'catalogo-v21';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 

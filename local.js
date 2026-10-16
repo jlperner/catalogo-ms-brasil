@@ -239,6 +239,47 @@ async function removePromo(id) {
   await idbDelPrefix(`promo/${id}/`);
 }
 
+// ---- Baixar tudo para usar offline ----
+// Guarda no aparelho todas as páginas, miniaturas, PDFs e promoções publicadas.
+// O service worker (sw.js) procura em todos os caches, então depois disso tudo abre sem internet.
+async function cacheAll() {
+  const urls = ['./', 'index.html', 'app.js', 'local.js', 'styles.css', 'manifest.json', 'icon.svg', 'indice.json', 'catalogo.pdf'];
+  if (!localCat) for (const p of pages) urls.push(`miniaturas/${p.n}.jpg`, `telas/${p.n}.jpg`, `paginas/${p.n}.pdf`);
+  try {
+    const res = await fetch('promocoes/promocoes.json', { cache: 'no-cache' });
+    if (res.ok) {
+      urls.push('promocoes/promocoes.json');
+      for (const p of await res.json()) urls.push('promocoes/' + p.arquivo, ...p.imagens.map((i) => 'promocoes/' + i));
+    }
+  } catch {}
+  const cache = await caches.open('catalogo-offline');
+  let feitos = 0, falhas = 0;
+  const fila = [...new Set(urls)];
+  async function worker() {
+    while (fila.length) {
+      const url = fila.shift();
+      try {
+        const res = await fetch(url, { cache: 'no-cache' });
+        if (res.ok) await cache.put(url, res); else falhas++;
+      } catch { falhas++; }
+      feitos++;
+      progress(`Baixando ${feitos} de ${urls.length} arquivos…`, feitos / urls.length);
+    }
+  }
+  progress('Preparando…', 0);
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  progressDone();
+  try { localStorage.setItem('offline-em', new Date().toLocaleDateString('pt-BR')); } catch {}
+  toast(falhas ? `Baixado, mas ${falhas} arquivo(s) falharam. Tente de novo com internet.` : 'Pronto! O catálogo inteiro funciona sem internet.');
+}
+
+document.getElementById('off-btn').onclick = () => {
+  document.getElementById('imp-dlg').close();
+  if (!('caches' in window)) return toast('Este navegador não permite guardar para uso offline (precisa do site em https).');
+  if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+  cacheAll();
+};
+
 // ---- Tela de importar ----
 function progress(text, frac) {
   document.getElementById('prog').hidden = false;
@@ -273,6 +314,9 @@ function openImportDialog() {
   const back = document.getElementById('imp-reset');
   info.textContent = localCat ? `Catálogo atual: importado neste tablet (${localCat.nome}).` : 'Catálogo atual: o original publicado.';
   back.hidden = !localCat;
+  let quando = null;
+  try { quando = localStorage.getItem('offline-em'); } catch {}
+  document.getElementById('off-info').textContent = quando ? `Último download completo: ${quando}. Repita quando o catálogo for atualizado.` : 'Baixa cerca de 90 MB. Use no Wi-Fi.';
   document.getElementById('imp-dlg').showModal();
 }
 
