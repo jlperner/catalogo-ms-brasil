@@ -106,6 +106,30 @@ async function catalogBlob(id) {
   return (await fetch(`catalogos/${id}/catalogo.pdf`)).blob();
 }
 
+// Junta várias páginas (de qualquer catálogo, inclusive promoções em imagem) num PDF só
+async function pagesPdf(ns) {
+  await loadScript(PDFLIB);
+  const doc = await PDFLib.PDFDocument.create();
+  try {
+    for (const [i, n] of ns.entries()) {
+      progress(`Montando o PDF: página ${i + 1} de ${ns.length}…`, i / ns.length);
+      const blob = await pageBlob(n);
+      const bytes = await blob.arrayBuffer();
+      if (blob.type.startsWith('image/')) {
+        const img = blob.type === 'image/png' ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
+        const k = 595 / img.width;
+        doc.addPage([595, img.height * k]).drawImage(img, { x: 0, y: 0, width: 595, height: img.height * k });
+      } else {
+        const src = await PDFLib.PDFDocument.load(bytes);
+        for (const pg of await doc.copyPages(src, src.getPageIndices())) doc.addPage(pg);
+      }
+    }
+    return new Blob([await doc.save()], { type: 'application/pdf' });
+  } finally {
+    progressDone();
+  }
+}
+
 // Monta um PDF a partir das imagens das páginas (para enviar/baixar)
 async function pdfFromJpgs(blobs) {
   await loadScript(PDFLIB);

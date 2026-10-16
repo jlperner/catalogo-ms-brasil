@@ -139,7 +139,10 @@ function render() {
       if (mode === 'fav') render();
     };
     card.append(star);
-    if (selecting) {
+    if (picking) {
+      card.classList.toggle('sel', picking.includes(p.n));
+      card.onclick = () => { togglePick(p.n); card.classList.toggle('sel', picking.includes(p.n)); };
+    } else if (selecting) {
       card.classList.toggle('sel', !!editing && catPages(editing).has(p.n));
       card.onclick = () => {
         if (!editing) return toast('Primeiro crie ou escolha a categoria na faixa amarela.');
@@ -275,13 +278,14 @@ const label = () => {
   return isPromo(p) ? `Promoção MS Brasil: ${p.titulo}` : `${p.titulo} — página ${p.pn} do catálogo ${bookOf(p).nome}`;
 };
 // Arquivo da página para enviar/baixar. Promoção em imagem vai como imagem; o resto como PDF.
-const pageFile = async () => {
-  const p = pages[current - 1];
-  const blob = await pageBlob(current);
+const pageFile = () => pageFileFor(current);
+async function pageFileFor(n) {
+  const p = pages[n - 1];
+  const blob = await pageBlob(n);
   const nome = (p.titulo || bookOf(p).nome + ' - pagina ' + p.pn).replace(/[\\/:*?"<>|]/g, '-');
   if (blob.type.startsWith('image/')) return new File([blob], `${nome}.${blob.type === 'image/png' ? 'png' : 'jpg'}`, { type: blob.type });
   return asPdf(blob, nome + '.pdf');
-};
+}
 
 $('v-zap').onclick = async () => {
   // Envia o PDF da página pelo menu do sistema (onde aparece o WhatsApp); sem suporte, manda só o texto.
@@ -305,23 +309,80 @@ function chosenBook() {
   if (!b) { toast('Escolha um catálogo em 📚 para enviar ou baixar.'); openBookMenu(); }
   return b;
 }
-$('share-all').onclick = async (e) => {
-  e.stopPropagation();
+function openSendMenu(btn, acao) {
+  const menu = $('send-menu');
+  menu.replaceChildren(
+    button('📘 Catálogo inteiro', '', () => { menu.hidden = true; wholeCatalog(acao); }),
+    button('✔ Escolher páginas…', '', () => { menu.hidden = true; startPicking(); }),
+  );
+  const r = btn.getBoundingClientRect();
+  menu.style.top = r.bottom + 6 + 'px';
+  menu.style.left = Math.max(8, Math.min(r.right - 240, innerWidth - 248)) + 'px';
+  menu.hidden = false;
+}
+async function wholeCatalog(acao) {
   const b = chosenBook();
   if (!b) return;
-  $('status').textContent = 'Preparando catálogo…';
+  $('status').textContent = acao === 'enviar' ? 'Preparando catálogo…' : 'Baixando catálogo…';
   const f = asPdf(await catalogBlob(b.id), b.nome + '.pdf');
   render();
+  if (acao === 'baixar') return download(f);
   if (!(await shareFile(f, b.nome))) toast('Este aparelho não permite compartilhar arquivos. Use "Baixar".');
-};
-$('download-all').onclick = async (e) => {
-  e.stopPropagation();
-  const b = chosenBook();
-  if (!b) return;
-  $('status').textContent = 'Baixando catálogo…';
-  download(asPdf(await catalogBlob(b.id), b.nome + '.pdf'));
+}
+$('share-all').onclick = (e) => { e.stopPropagation(); openSendMenu(e.currentTarget, 'enviar'); };
+$('download-all').onclick = (e) => { e.stopPropagation(); openSendMenu(e.currentTarget, 'baixar'); };
+document.addEventListener('click', (e) => { if (!$('send-menu').contains(e.target)) $('send-menu').hidden = true; });
+
+// ---- Escolher páginas para enviar ou baixar ----
+// Faixa verde: toca nas páginas (de qualquer catálogo, usando busca e 📚 à vontade) e envia tudo junto.
+// Vão num PDF só, na ordem em que foram tocadas; se forem só promoções em imagem, vão como imagens.
+let picking = null; // números (n) das páginas escolhidas, na ordem do toque
+
+function startPicking() {
+  if (selecting) $('edit-done').onclick();
+  picking = [];
+  document.body.classList.add('picking');
+  updatePickBar();
   render();
+}
+function stopPicking() {
+  picking = null;
+  document.body.classList.remove('picking');
+  render();
+}
+function togglePick(n) {
+  const i = picking.indexOf(n);
+  if (i >= 0) picking.splice(i, 1); else picking.push(n);
+  updatePickBar();
+}
+function updatePickBar() {
+  $('pick-text').textContent = picking.length
+    ? `${picking.length} página(s) selecionada(s)`
+    : 'Toque nas páginas que você quer enviar. Pode buscar e trocar de catálogo.';
+  $('pick-send').disabled = $('pick-down').disabled = $('pick-clear').disabled = !picking.length;
+}
+async function pickedFiles() {
+  const ps = picking.map((n) => pages[n - 1]);
+  if (ps.every(isPromo)) {
+    const files = await Promise.all(picking.map((n) => pageFileFor(n)));
+    if (files.every((f) => f.type.startsWith('image/'))) return files;
+  }
+  const livros = new Set(ps.map((p) => p.book));
+  const nome = livros.size === 1 && !isPromo(ps[0]) ? `${bookOf(ps[0]).nome} - ${ps.length} páginas` : `MS Brasil - ${ps.length} páginas`;
+  return [asPdf(await pagesPdf(picking), nome + '.pdf')];
+}
+const pickText = () => 'MS Brasil:\n' + picking.map((n) => '• ' + (pages[n - 1].titulo || 'página ' + pages[n - 1].pn)).join('\n');
+
+$('pick-send').onclick = async () => {
+  const files = await pickedFiles();
+  if (!navigator.canShare || !navigator.canShare({ files })) return toast('Este aparelho não permite compartilhar arquivos. Use "Baixar".');
+  try { await navigator.share({ files, text: pickText() }); } catch {}
 };
+$('pick-down').onclick = async () => {
+  for (const f of await pickedFiles()) download(f);
+};
+$('pick-clear').onclick = () => { picking = []; updatePickBar(); render(); };
+$('pick-cancel').onclick = stopPicking;
 
 const asPdf = (blob, name) => new File([blob], name.replace(/[\\/:*?"<>|]/g, '-'), { type: 'application/pdf' });
 
