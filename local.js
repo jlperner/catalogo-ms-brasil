@@ -235,14 +235,14 @@ async function removeLocalBook(id) {
 async function imageToJpgs(file) {
   const bmp = await createImageBitmap(file);
   const tela = document.createElement('canvas');
-  tela.width = TELA_W;
-  tela.height = Math.round(bmp.height * (TELA_W / bmp.width));
+  tela.width = Math.min(TELA_W, bmp.width); // não amplia imagens menores
+  tela.height = Math.round(bmp.height * (tela.width / bmp.width));
   tela.getContext('2d').drawImage(bmp, 0, 0, tela.width, tela.height);
   const mini = document.createElement('canvas');
   mini.width = MINI_W;
   mini.height = Math.round(bmp.height * (MINI_W / bmp.width));
   mini.getContext('2d').drawImage(bmp, 0, 0, mini.width, mini.height);
-  return { tela: await toJpg(tela, 0.82), mini: await toJpg(mini, 0.7) };
+  return { tela: await toJpg(tela, 0.75), mini: await toJpg(mini, 0.7) };
 }
 
 async function importPromo(file) {
