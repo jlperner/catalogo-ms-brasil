@@ -360,7 +360,8 @@ function openImportDialog() {
   }
   let quando = null;
   try { quando = localStorage.getItem('offline-em'); } catch {}
-  const mb = Math.round(pages.filter((p) => !localAssets[p.book]).length * 0.6);
+  // Tamanho real dos catálogos publicados (calculado pelo preparar.py) + promoções
+  const mb = Math.round(books.filter((b) => !b.local).reduce((t, b) => t + (b.mb || b.paginas * 0.6), 0) + 7);
   document.getElementById('off-info').textContent = quando
     ? `Último download completo: ${quando}. Repita quando os catálogos forem atualizados.`
     : `Baixa cerca de ${mb} MB. Use no Wi-Fi.`;

@@ -3,24 +3,28 @@
   "id": "atualizacao-do-catalogo",
   "nome": "atualização do catalogo",
   "paginas": 15,
-  "assinatura": "37261101-1792116991"
+  "assinatura": "37261101-1792116991",
+  "mb": 11.4
  },
  {
   "id": "catalogo-atualizado-ms-brasil",
   "nome": "Catalogo Atualizado- MS BRASIL",
   "paginas": 147,
-  "assinatura": "225593437-1792117010"
+  "assinatura": "225593437-1792117010",
+  "mb": 110.7
  },
  {
   "id": "catalogo-amatools-2024-2025-08",
   "nome": "CATÁLOGO AMATOOLS - 2024-2025.08",
   "paginas": 348,
-  "assinatura": "50758174-1792117010"
+  "assinatura": "50758174-1792117010",
+  "mb": 258.5
  },
  {
   "id": "lancamentos",
   "nome": "lançamentos",
   "paginas": 27,
-  "assinatura": "61979065-1792116997"
+  "assinatura": "61979065-1792116997",
+  "mb": 23.0
  }
 ]
