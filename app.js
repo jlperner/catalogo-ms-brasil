@@ -103,7 +103,7 @@ function render() {
   const q = norm($('search').value.trim());
   let list = seq();
   if (mode === 'fav') list = list.filter((p) => favs.has(pageKey(p)));
-  if (catFilter && !editing) { const set = catPages(catFilter); list = list.filter((p) => set.has(p.n)); }
+  if (catFilter && !selecting) { const set = catPages(catFilter); list = list.filter((p) => set.has(p.n)); }
   const conteudo = $('search-mode').value === 'conteudo';
   // Modo "Nome": palavras com número são códigos (procurados na página toda); o resto busca só no nome do produto.
   // Modo "Conteúdo": procura em toda a ficha.
@@ -139,9 +139,14 @@ function render() {
       if (mode === 'fav') render();
     };
     card.append(star);
-    if (editing) {
-      card.classList.toggle('sel', catPages(editing).has(p.n));
-      card.onclick = () => { toggleCatPage(editing, p); card.classList.toggle('sel', catPages(editing).has(p.n)); updateEditBar(); };
+    if (selecting) {
+      card.classList.toggle('sel', !!editing && catPages(editing).has(p.n));
+      card.onclick = () => {
+        if (!editing) return toast('Primeiro crie ou escolha a categoria na faixa amarela.');
+        toggleCatPage(editing, p);
+        card.classList.toggle('sel', catPages(editing).has(p.n));
+        updateEditBar();
+      };
     } else card.onclick = () => openViewer(p.n);
     grid.append(card);
   }
@@ -392,12 +397,7 @@ function openCatMenu() {
   const menu = $('cat-menu');
   menu.replaceChildren(button('Todas as páginas', catFilter ? '' : 'on', () => pickCat('')));
   for (const c of catNames()) menu.append(button(`${c}  (${catPages(c).size})`, c === catFilter ? 'on' : '', () => pickCat(c)));
-  if (!catNames().length) {
-    const p = document.createElement('p');
-    p.className = 'muted';
-    p.textContent = 'Nenhuma categoria. Toque em ⚙ para criar.';
-    menu.append(p);
-  }
+  menu.append(button('✎ Escolher páginas…', 'menu-act', () => { menu.hidden = true; startEditing(catFilter || catNames()[0] || null, false); }));
   menu.hidden = false;
 }
 $('cat-btn').onclick = (e) => { e.stopPropagation(); $('cat-menu').hidden ? openCatMenu() : ($('cat-menu').hidden = true); };
@@ -524,25 +524,69 @@ $('recv-save').onclick = () => {
 $('recv-name').oninput = () => { delete $('recv-save').dataset.armed; $('recv-save').textContent = 'Salvar'; };
 $('recv-cancel').onclick = () => $('recv-dlg').close();
 
-function startEditing(name) {
+// Modo de seleção: a faixa amarela mostra para qual categoria vão as páginas tocadas,
+// e dá para trocar de categoria ou criar uma nova ali mesmo, sem sair do modo.
+let selecting = false, voltarParaGerenciar = false;
+
+function startEditing(name, fromDialog = true) {
+  selecting = true;
   editing = name;
-  $('cats-dlg').close();
+  voltarParaGerenciar = fromDialog;
+  if ($('cats-dlg').open) $('cats-dlg').close();
   document.body.classList.add('editing');
-  updateEditBar();
+  fillEditCat();
   render();
   window.scrollTo(0, 0);
 }
-function updateEditBar() {
-  $('edit-text').textContent = `Escolhendo páginas para "${editing}" — ${catPages(editing).size} selecionada(s). Toque nas páginas para marcar ou desmarcar; use a busca para achar os produtos.`;
+function fillEditCat() {
+  const sel = $('edit-cat');
+  sel.innerHTML = (editing ? '' : '<option value="" disabled>Escolha…</option>') +
+    catNames().map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('') +
+    '<option value="__nova">+ Nova categoria…</option>';
+  sel.value = editing || '';
+  showNewCat(!catNames().length);
+  updateEditBar();
 }
+function showNewCat(on) {
+  $('edit-new').hidden = $('edit-new-ok').hidden = !on;
+  $('edit-cat').hidden = on && !catNames().length;
+  if (on) $('edit-new').focus();
+}
+function updateEditBar() {
+  $('edit-text').textContent = editing
+    ? `${catPages(editing).size} selecionada(s). Toque nas páginas para marcar ou desmarcar; use a busca para achar os produtos.`
+    : 'Crie ou escolha a categoria para começar.';
+}
+$('edit-cat').onchange = () => {
+  if ($('edit-cat').value === '__nova') return showNewCat(true);
+  showNewCat(false);
+  editing = $('edit-cat').value;
+  updateEditBar();
+  render();
+};
+$('edit-new-ok').onclick = () => {
+  const nome = $('edit-new').value.trim();
+  if (!nome) return;
+  if (cats[nome]) return toast('Já existe uma categoria com esse nome.');
+  cats[nome] = [];
+  saveCats();
+  $('edit-new').value = '';
+  editing = nome;
+  fillCatSelect();
+  fillEditCat();
+  render();
+  toast(`Categoria "${nome}" criada. Toque nas páginas para colocar nela.`);
+};
+$('edit-new').onkeydown = (e) => { if (e.key === 'Enter') $('edit-new-ok').onclick(); };
 $('edit-done').onclick = () => {
   const name = editing;
+  selecting = false;
   editing = null;
   document.body.classList.remove('editing');
   fillCatSelect();
   render();
-  openCatsDialog();
-  toast(`Categoria "${name}" salva no seu tablet.`);
+  if (voltarParaGerenciar) openCatsDialog();
+  if (name) toast(`Categoria "${name}" salva no seu tablet.`);
 };
 
 // ---- Promoções ----

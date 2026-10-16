@@ -36,7 +36,14 @@
     <button id="cat-gear" class="ghost" title="Gerenciar categorias">⚙</button>
   </div>
 </header>
-<div id="edit-bar"><span id="edit-text"></span><button id="edit-done">✓ Concluir</button></div>
+<div id="edit-bar">
+  <span class="edit-lbl">Escolhendo páginas para</span>
+  <select id="edit-cat" title="Categoria que recebe as páginas"></select>
+  <input id="edit-new" placeholder="Nome da nova categoria" hidden>
+  <button id="edit-new-ok" class="pri" hidden>Criar</button>
+  <span id="edit-text"></span>
+  <button id="edit-done">✓ Concluir</button>
+</div>
 
 <dialog id="cats-dlg">
   <h2>Gerenciar categorias</h2>

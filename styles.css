@@ -68,7 +68,12 @@ header .active-cat { background: #fbbf24; color: #1b1b1b; }
 #edit-bar { display: none; position: sticky; top: 96px; z-index: 4; gap: 12px; align-items: center;
   padding: 10px 16px; background: #fef3c7; color: #78350f; font-size: 15px; }
 body.editing #edit-bar { display: flex; }
-#edit-bar span { flex: 1; }
+#edit-bar #edit-text { flex: 1; }
+#edit-bar { flex-wrap: wrap; }
+#edit-cat, #edit-new { height: 36px; font: inherit; font-size: 15px; font-weight: 600; padding: 0 10px;
+  border: 2px solid #b45309; border-radius: 8px; background: #fff; color: #78350f; }
+#edit-new-ok { height: 36px; padding: 0 14px; }
+.menu button.menu-act { border-top: 1px solid #e5e7eb; border-radius: 0 0 8px 8px; color: var(--pri); font-weight: 600; }
 #edit-done { background: #15803d; color: #fff; height: 36px; padding: 0 16px; }
 body.editing .card .star { display: none; }
 .card.sel { outline: 4px solid #15803d; }
