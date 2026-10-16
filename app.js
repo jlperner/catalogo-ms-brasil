@@ -1,38 +1,98 @@
-// Arquivos gerados pelo preparar.py. Para atualizar o catálogo, rode o script e publique a pasta site/.
-const PDF_NAME = 'Catalogo-MS-Brasil.pdf';
+// Catálogos: os publicados (pasta catalogo/, gerados pelo preparar.py) e os importados neste tablet (local.js).
+// Todas as páginas de todos os catálogos ficam numa lista só; cada página sabe de que catálogo é (book)
+// e qual é o número dela dentro dele (pn). O número global (n) só vale enquanto o app está aberto.
 
 const $ = (id) => document.getElementById(id);
 const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-let pages = []; // { n, titulo, texto, ntexto }
-let favs = loadFavs();
+let books = [];      // { id, nome, paginas, local? }
+let pages = [];      // { n, book, pn, titulo, texto, ntitulo, ntexto }
+let bookFilter = ''; // catálogo escolhido em 📚 ('' = todos)
 let mode = 'all', current = 1;
 
-function loadFavs() { try { return new Set(JSON.parse(localStorage.getItem('favs') || '[]')); } catch { return new Set(); } }
-function saveFavs() { try { localStorage.setItem('favs', JSON.stringify([...favs])); } catch {} }
+const bookById = (id) => books.find((b) => b.id === id);
+const bookOf = (p) => bookById(p.book);
+const pageKey = (p) => `${p.book}:${p.pn}`;
+// Páginas do catálogo escolhido (ou de todos), na ordem em que o visualizador passa por elas
+const seq = () => (bookFilter ? pages.filter((p) => p.book === bookFilter) : pages);
+
+// Favoritos guardados por catálogo + página, para não mudarem quando entrar um catálogo novo
+let favs = new Set();
+try { favs = new Set(JSON.parse(localStorage.getItem('favs2') || '[]')); } catch {}
+const saveFavs = () => { try { localStorage.setItem('favs2', JSON.stringify([...favs])); } catch {} };
+const isFav = (n) => favs.has(pageKey(pages[n - 1]));
+function toggleFav(n) {
+  const k = pageKey(pages[n - 1]);
+  favs.has(k) ? favs.delete(k) : favs.add(k);
+  saveFavs();
+}
 
 async function init() {
   try {
-    // Catálogo importado neste tablet tem prioridade sobre o publicado (ver local.js)
-    let indice = await loadLocalCatalog();
-    if (!indice) {
-      const res = await fetch('indice.json', { cache: 'no-cache' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      indice = await res.json();
+    let publicados = [];
+    try {
+      const res = await fetch('catalogos.json', { cache: 'no-cache' });
+      if (res.ok) publicados = await res.json();
+    } catch {}
+    const lista = (await Promise.all(publicados.map(async (b) => {
+      try {
+        const r = await fetch(`catalogos/${b.id}/indice.json`, { cache: 'no-cache' });
+        return r.ok ? { book: b, indice: await r.json() } : null;
+      } catch { return null; }
+    }))).filter(Boolean);
+    lista.push(...(await loadLocalBooks()));
+    books = lista.map((l) => l.book);
+    pages = [];
+    for (const { book, indice } of lista) {
+      for (const p of indice) {
+        pages.push({
+          n: pages.length + 1, book: book.id, pn: p.pn, titulo: p.titulo, texto: p.texto,
+          ntitulo: norm(p.titulo).replace(/[^a-z0-9]+/g, ' '), ntexto: norm(p.texto),
+        });
+      }
     }
-    pages = indice.map((p) => ({ ...p, ntitulo: norm(p.titulo).replace(/[^a-z0-9]+/g, ' '), ntexto: norm(p.texto) }));
+    if (!pages.length) throw new Error('nenhum catálogo encontrado. Use ⬆ Importar para adicionar um PDF');
   } catch (e) {
     $('status').textContent = 'Não foi possível carregar o catálogo (' + e.message + ').';
     return;
   }
+  try { bookFilter = localStorage.getItem('book') || ''; } catch {}
+  if (!bookById(bookFilter)) bookFilter = '';
+  fillBookBtn();
   loadCats();
   render();
 }
 
+// ---- 📚 Escolher catálogo ----
+function fillBookBtn() {
+  const b = bookById(bookFilter);
+  $('book-btn').textContent = `📚 ${b ? b.nome : books.length > 1 ? 'Todos os catálogos' : (books[0]?.nome || 'Catálogo')} ▾`;
+  $('book-btn').classList.toggle('active-cat', !!b && books.length > 1);
+}
+function pickBook(id) {
+  bookFilter = id;
+  try { localStorage.setItem('book', id); } catch {}
+  $('book-menu').hidden = true;
+  $('v-list').replaceChildren();  // a rolagem contínua é montada de novo para o catálogo escolhido
+  fillBookBtn();
+  render();
+}
+function openBookMenu() {
+  const menu = $('book-menu');
+  menu.replaceChildren(button(`Todos os catálogos  (${pages.length} pág.)`, bookFilter ? '' : 'on', () => pickBook('')));
+  for (const b of books) {
+    menu.append(button(`${b.nome}  (${b.paginas} pág.)${b.local ? '  · importado' : ''}`, b.id === bookFilter ? 'on' : '', () => pickBook(b.id)));
+  }
+  menu.hidden = false;
+}
+$('book-btn').onclick = (e) => { e.stopPropagation(); $('book-menu').hidden ? openBookMenu() : ($('book-menu').hidden = true); };
+document.addEventListener('click', (e) => { if (!$('book-menu').contains(e.target)) $('book-menu').hidden = true; });
+
 function render() {
   const q = norm($('search').value.trim());
-  let list = mode === 'fav' ? pages.filter((p) => favs.has(p.n)) : pages;
+  let list = seq();
+  if (mode === 'fav') list = list.filter((p) => favs.has(pageKey(p)));
   if (catFilter && !editing) { const set = catPages(catFilter); list = list.filter((p) => set.has(p.n)); }
   const conteudo = $('search-mode').value === 'conteudo';
   // Modo "Nome": palavras com número são códigos (procurados na página toda); o resto busca só no nome do produto.
@@ -40,29 +100,30 @@ function render() {
   if (q) list = list.filter((p) => q.split(/\s+/).every((w) =>
     conteudo ? (p.ntitulo + ' ' + p.ntexto).includes(w)
              : (/\d/.test(w) ? ' ' + p.ntexto : ' ' + p.ntitulo).includes(' ' + w)));
-  $('status').textContent = q || mode === 'fav' || catFilter ? `${list.length} página(s) encontrada(s)` : `${pages.length} páginas`;
+  $('status').textContent = q || mode === 'fav' || catFilter ? `${list.length} página(s) encontrada(s)` : `${list.length} páginas`;
 
+  const showBook = books.length > 1 && !bookFilter;
   const grid = $('grid');
   grid.innerHTML = '';
   if (!list.length) {
     $('status').textContent = '';
     grid.innerHTML = `<div class="empty">${mode === 'fav' && !q
       ? 'Nenhum favorito ainda. Toque na ☆ de uma página para guardar aqui.'
-      : catFilter && !q ? 'Esta categoria ainda não tem páginas. Use ⚙ Gerenciar categorias → Escolher páginas.'
-      : 'Nada encontrado. Tente outra palavra ou mude para "Conteúdo da ficha".'}</div>`;
+      : catFilter && !q ? 'Esta categoria ainda não tem páginas. Use ⚙ → Escolher páginas.'
+      : 'Nada encontrado. Tente outra palavra, mude para "Conteúdo da ficha" ou escolha "Todos os catálogos" em 📚.'}</div>`;
   }
   for (const p of list) {
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `<img loading="lazy" src="${miniUrl(p.n)}" alt="">
-      <div class="info"><b>Pág. ${p.n}</b> ${esc(p.titulo)}${q ? `<div class="snip">${snippet(p, q)}</div>` : ''}</div>`;
+      <div class="info"><b>Pág. ${p.pn}</b> ${esc(p.titulo)}${showBook ? `<div class="book">${esc(bookOf(p).nome)}</div>` : ''}${q ? `<div class="snip">${snippet(p, q)}</div>` : ''}</div>`;
     const star = document.createElement('button');
     star.className = 'star';
-    star.textContent = favs.has(p.n) ? '★' : '☆';
+    star.textContent = isFav(p.n) ? '★' : '☆';
     star.onclick = (e) => {
       e.stopPropagation();
       toggleFav(p.n);
-      star.textContent = favs.has(p.n) ? '★' : '☆';
+      star.textContent = isFav(p.n) ? '★' : '☆';
       if (mode === 'fav') render();
     };
     card.append(star);
@@ -84,8 +145,6 @@ function snippet(p, q) {
   return '…' + esc(p.texto.slice(a, i)) + '<mark>' + esc(p.texto.slice(i, i + w.length)) + '</mark>' + esc(p.texto.slice(i + w.length, b)) + '…';
 }
 
-function toggleFav(n) { favs.has(n) ? favs.delete(n) : favs.add(n); saveFavs(); }
-
 // ---- Visualizador ----
 // Modo de leitura: 'uma' (uma página por vez) ou 'continuo' (páginas uma embaixo da outra, rolando)
 let leitura = 'uma';
@@ -93,10 +152,11 @@ try { leitura = localStorage.getItem('leitura') || 'uma'; } catch {}
 
 function setCurrent(n) {
   current = n;
-  $('v-title').textContent = `Página ${n} de ${pages.length} — ${pages[n - 1].titulo}`;
-  $('v-fav').textContent = favs.has(n) ? '★' : '☆';
-  $('side-prev').disabled = n <= 1;
-  $('side-next').disabled = n >= pages.length;
+  const p = pages[n - 1], b = bookOf(p), s = seq(), i = s.indexOf(p);
+  $('v-title').textContent = `${books.length > 1 ? b.nome + ' · ' : ''}Página ${p.pn} de ${b.paginas} — ${p.titulo}`;
+  $('v-fav').textContent = isFav(n) ? '★' : '☆';
+  $('side-prev').disabled = i <= 0;
+  $('side-next').disabled = i < 0 || i >= s.length - 1;
 }
 
 function openViewer(n) {
@@ -108,11 +168,12 @@ function openViewer(n) {
     // Só troca quando a imagem nova estiver pronta (sem piscar) e já deixa as vizinhas carregando
     const src = telaUrl(n);
     preload(src).then(() => { if (current === n) $('v-img').src = src; });
-    for (const k of [n + 1, n - 1, n + 2]) if (k >= 1 && k <= pages.length) preload(telaUrl(k));
+    const s = seq(), i = s.indexOf(pages[n - 1]);
+    for (const k of [i + 1, i - 1, i + 2]) if (s[k]) preload(telaUrl(s[k].n));
     $('v-wrap').scrollTo(0, 0);
   } else {
     buildList();
-    $('v-list').children[n - 1].scrollIntoView();
+    $('v-list').querySelector(`[data-n="${n}"]`)?.scrollIntoView();
   }
 }
 
@@ -128,7 +189,7 @@ function preload(src) {
   return preloaded.get(src);
 }
 
-// Rolagem contínua: todas as páginas empilhadas; carrega as imagens conforme aparecem
+// Rolagem contínua: todas as páginas do catálogo empilhadas; carrega as imagens conforme aparecem
 const pageSeen = new IntersectionObserver((entries) => {
   for (const e of entries) {
     if (e.isIntersecting) setCurrent(+e.target.dataset.n);
@@ -138,7 +199,8 @@ const pageSeen = new IntersectionObserver((entries) => {
 function buildList() {
   const list = $('v-list');
   if (list.children.length) return;
-  for (const p of pages) {
+  pageSeen.disconnect();
+  for (const p of seq()) {
     const img = document.createElement('img');
     img.loading = 'lazy';
     img.src = telaUrl(p.n);
@@ -149,10 +211,11 @@ function buildList() {
   }
 }
 
-function goTo(n) {
-  if (n < 1 || n > pages.length) return;
-  if (leitura === 'uma') openViewer(n);
-  else $('v-list').children[n - 1].scrollIntoView({ behavior: 'smooth' });
+function goTo(delta) {
+  const s = seq(), i = s.indexOf(pages[current - 1]) + delta;
+  if (!s[i]) return;
+  if (leitura === 'uma') openViewer(s[i].n);
+  else $('v-list').querySelector(`[data-n="${s[i].n}"]`)?.scrollIntoView({ behavior: 'smooth' });
 }
 
 function marcarLeitura() {
@@ -166,17 +229,17 @@ function setLeitura(m) {
   if (!$('viewer').hidden) openViewer(current);
 }
 // Pelos botões do topo, o catálogo sempre abre do começo
-$('h-uma').onclick = () => { setLeitura('uma'); openViewer(1); };
-$('h-cont').onclick = () => { setLeitura('continuo'); openViewer(1); };
+$('h-uma').onclick = () => { setLeitura('uma'); openViewer(seq()[0].n); };
+$('h-cont').onclick = () => { setLeitura('continuo'); openViewer(seq()[0].n); };
 marcarLeitura();
 $('m-uma').onclick = () => setLeitura('uma');
 $('m-cont').onclick = () => setLeitura('continuo');
 $('v-close').onclick = () => { $('viewer').hidden = true; render(); };
-$('v-prev').onclick = () => goTo(current - 1);
-$('v-next').onclick = () => goTo(current + 1);
-$('side-prev').onclick = () => $('v-prev').onclick();
-$('side-next').onclick = () => $('v-next').onclick();
-$('v-fav').onclick = () => { toggleFav(current); $('v-fav').textContent = favs.has(current) ? '★' : '☆'; };
+$('v-prev').onclick = () => goTo(-1);
+$('v-next').onclick = () => goTo(1);
+$('side-prev').onclick = () => goTo(-1);
+$('side-next').onclick = () => goTo(1);
+$('v-fav').onclick = () => { toggleFav(current); $('v-fav').textContent = isFav(current) ? '★' : '☆'; };
 
 // Deslizar para trocar de página (só sem zoom)
 let sx = null;
@@ -184,13 +247,18 @@ $('v-wrap').addEventListener('touchstart', (e) => { sx = e.touches.length === 1 
 $('v-wrap').addEventListener('touchend', (e) => {
   if (sx === null || leitura !== 'uma') return;
   const dx = e.changedTouches[0].clientX - sx;
-  if (dx > 80) $('v-prev').onclick();
-  if (dx < -80) $('v-next').onclick();
+  if (dx > 80) goTo(-1);
+  if (dx < -80) goTo(1);
 });
 
-const label = () => `${pages[current - 1].titulo} — página ${current} do catálogo MS Brasil`;
-const pageFile = async () => asPdf(await pageBlob(current), `${pages[current - 1].titulo || 'Pagina ' + current}.pdf`);
-const catalogFile = async () => asPdf(await catalogBlob(), PDF_NAME);
+const label = () => {
+  const p = pages[current - 1];
+  return `${p.titulo} — página ${p.pn} do catálogo ${bookOf(p).nome}`;
+};
+const pageFile = async () => {
+  const p = pages[current - 1];
+  return asPdf(await pageBlob(current), `${p.titulo || bookOf(p).nome + ' - pagina ' + p.pn}.pdf`);
+};
 
 $('v-zap').onclick = async () => {
   // Envia o PDF da página pelo menu do sistema (onde aparece o WhatsApp); sem suporte, manda só o texto.
@@ -198,7 +266,7 @@ $('v-zap').onclick = async () => {
     window.open('https://wa.me/?text=' + encodeURIComponent(label()), '_blank');
 };
 $('v-mail').onclick = () => {
-  location.href = 'mailto:?subject=' + encodeURIComponent('Catálogo MS Brasil — ' + pages[current - 1].titulo) +
+  location.href = 'mailto:?subject=' + encodeURIComponent(bookOf(pages[current - 1]).nome + ' — ' + pages[current - 1].titulo) +
     '&body=' + encodeURIComponent(label());
 };
 $('v-share').onclick = async () => {
@@ -206,15 +274,27 @@ $('v-share').onclick = async () => {
 };
 $('v-down').onclick = async () => download(await pageFile());
 
-$('share-all').onclick = async () => {
+// Enviar/Baixar do topo: o catálogo escolhido em 📚 (ou o único que existir)
+function chosenBook() {
+  const b = bookById(bookFilter) || (books.length === 1 ? books[0] : null);
+  if (!b) { toast('Escolha um catálogo em 📚 para enviar ou baixar.'); openBookMenu(); }
+  return b;
+}
+$('share-all').onclick = async (e) => {
+  e.stopPropagation();
+  const b = chosenBook();
+  if (!b) return;
   $('status').textContent = 'Preparando catálogo…';
-  const f = await catalogFile();
+  const f = asPdf(await catalogBlob(b.id), b.nome + '.pdf');
   render();
-  if (!(await shareFile(f, 'Catálogo MS Brasil'))) toast('Este aparelho não permite compartilhar arquivos. Use "Baixar".');
+  if (!(await shareFile(f, b.nome))) toast('Este aparelho não permite compartilhar arquivos. Use "Baixar".');
 };
-$('download-all').onclick = async () => {
+$('download-all').onclick = async (e) => {
+  e.stopPropagation();
+  const b = chosenBook();
+  if (!b) return;
   $('status').textContent = 'Baixando catálogo…';
-  download(await catalogFile());
+  download(asPdf(await catalogBlob(b.id), b.nome + '.pdf'));
   render();
 };
 
@@ -250,19 +330,27 @@ function loadCats() {
 }
 function saveCats() { try { localStorage.setItem('cats', JSON.stringify(cats)); } catch {} }
 
+// Cada item guarda o nome do produto (t), o catálogo (b) e a página nele (p).
+// Procura primeiro a mesma página com o mesmo nome; se o catálogo mudou, procura o nome no mesmo catálogo
+// e depois em qualquer catálogo. (Itens antigos só têm n e t.)
+function findCatItem(x) {
+  const same = x.b && pages.find((p) => p.book === x.b && p.pn === x.p);
+  if (same && (!x.t || same.titulo === x.t)) return same;
+  if (x.t) return pages.find((p) => p.titulo === x.t && (!x.b || p.book === x.b)) || pages.find((p) => p.titulo === x.t);
+  return same || null;
+}
 function catPages(name) {
   const set = new Set();
-  for (const { n, t } of cats[name] || []) {
-    const byTitle = t && pages.find((p) => p.titulo === t);
-    if (byTitle) set.add(byTitle.n);
-    else if (pages[n - 1]) set.add(n);
+  for (const x of cats[name] || []) {
+    const p = findCatItem(x);
+    if (p) set.add(p.n);
   }
   return set;
 }
 function toggleCatPage(name, p) {
   const list = cats[name];
-  const i = list.findIndex((x) => (x.t ? x.t === p.titulo : x.n === p.n));
-  if (i >= 0) list.splice(i, 1); else list.push({ n: p.n, t: p.titulo });
+  const i = list.findIndex((x) => findCatItem(x) === p);
+  if (i >= 0) list.splice(i, 1); else list.push({ t: p.titulo, b: p.book, p: p.pn });
   saveCats();
 }
 
@@ -372,7 +460,7 @@ const toB64 = (s) => btoa(String.fromCharCode(...new TextEncoder().encode(s))).r
 const fromB64 = (s) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)));
 
 async function shareCat(name) {
-  const data = { nome: name, p: cats[name].map(({ n, t }) => [n, t]) };
+  const data = { nome: name, i: cats[name].map((x) => [x.t || '', x.b || '', x.p || 0]) };
   const url = location.origin + location.pathname + '#categoria=' + toB64(JSON.stringify(data));
   const text = `Categoria "${name}" do catálogo MS Brasil (${cats[name].length} páginas). Abra o link no tablet para salvar:`;
   if (navigator.share) {
@@ -389,7 +477,10 @@ function receiveSharedCat() {
   history.replaceState(null, '', location.pathname);
   try {
     const d = JSON.parse(fromB64(m[1]));
-    incoming = { nome: String(d.nome).slice(0, 60), itens: d.p.map(([n, t]) => ({ n: +n, t: String(t) })) };
+    const itens = d.i
+      ? d.i.map(([t, b, p]) => ({ t: String(t), b: String(b), p: +p }))
+      : d.p.map(([n, t]) => ({ n: +n, t: String(t) })); // links do formato antigo
+    incoming = { nome: String(d.nome).slice(0, 60), itens };
   } catch { return toast('Link de categoria inválido.'); }
   $('recv-text').textContent = `Você recebeu a categoria "${incoming.nome}" com ${incoming.itens.length} página(s). Quer salvar no seu tablet?`;
   $('recv-name').value = incoming.nome;

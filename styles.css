@@ -82,12 +82,12 @@ body.editing .card:not(.sel) img { opacity: .75; }
 .cat-row b { flex: 1; }
 .cat-wrap { position: relative; flex-shrink: 1; min-width: 70px; }
 .cat-wrap #cat-btn { width: 100%; }
-#cat-menu { position: absolute; top: 42px; left: 0; min-width: 240px; max-height: 60vh; overflow: auto; background: #fff;
+.menu { position: absolute; top: 42px; left: 0; min-width: 240px; max-height: 60vh; overflow: auto; background: #fff;
   border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.25); padding: 6px; display: flex; flex-direction: column; gap: 2px; z-index: 20; }
-#cat-menu[hidden] { display: none; }
-#cat-menu button { text-align: left; background: transparent; color: var(--txt); height: 40px; font-size: 15px; }
-#cat-menu button.on { background: var(--pri); color: #fff; }
-#cat-menu p { margin: 8px 10px; }
+.menu[hidden] { display: none; }
+.menu button { text-align: left; background: transparent; color: var(--txt); height: 40px; font-size: 15px; }
+.menu button.on { background: var(--pri); color: #fff; }
+.menu p { margin: 8px 10px; }
 .cat-row button, .cat-new button, .dlg-foot button { height: 34px; padding: 0 12px; font-size: 14px; border-radius: 8px; }
 .muted { color: var(--muted); font-size: 14px; }
 .pri { background: var(--pri); color: #fff; }
@@ -152,7 +152,7 @@ header .row + .row .cat-wrap { flex-shrink: 1; }
   header .row + .row::-webkit-scrollbar { display: none; }
   #search-mode { width: 104px; }
   #cat-btn { max-width: 130px; }
-  #cat-menu { position: fixed; top: 100px; left: 10px; right: 10px; min-width: 0; }
+  .menu { position: fixed; top: 100px; left: 10px; right: 10px; min-width: 0; }
   main { padding: 10px; }
   #grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .card .info { font-size: 13px; padding: 6px 8px; }
@@ -173,4 +173,14 @@ header .row + .row .cat-wrap { flex-shrink: 1; }
   #side-prev { left: 4px; }
   #side-next { right: 4px; }
   .cat-row b { flex-basis: 100%; }
+}
+
+/* Vários catálogos */
+.book-wrap { flex: 0 1 auto; min-width: 90px; max-width: 280px; }
+#book-btn { width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.card .book { color: var(--pri); font-size: 12px; margin-top: 3px; font-weight: 600; }
+#imp-books { margin-top: 12px; }
+#imp-books .cat-row b { font-weight: 600; }
+@media (max-width: 599px) {
+  .book-wrap { max-width: 110px; min-width: 60px; }
 }

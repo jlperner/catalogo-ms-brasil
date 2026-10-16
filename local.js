@@ -56,37 +56,50 @@ async function idbDelPrefix(prefix) {
   });
 }
 
-// ---- Catálogo local ----
-let localCat = null; // { nome, telas: [Blob], minis: [url], telaUrls: [url] }
+// ---- Catálogos importados neste tablet ----
+// Cada PDF importado vira mais um catálogo (somado aos publicados). Guardado no IndexedDB:
+//   books                lista [{ id, nome, paginas }]
+//   book/<id>/indice     [{ pn, titulo, texto }]
+//   book/<id>/tela/<pn>, book/<id>/mini/<pn>   imagens JPEG
+const localAssets = {}; // id → { telas: [Blob], telaUrls: [url], minis: [url] }
 
-async function loadLocalCatalog() {
+async function loadLocalBooks() {
   try {
-    const indice = await idbGet('cat/indice');
-    if (!indice) return null;
-    const telas = await Promise.all(indice.map((p) => idbGet('cat/tela/' + p.n)));
-    const minis = await Promise.all(indice.map((p) => idbGet('cat/mini/' + p.n)));
-    localCat = {
-      nome: await idbGet('cat/nome'),
-      telas,
-      telaUrls: telas.map((b) => URL.createObjectURL(b)),
-      minis: minis.map((b) => URL.createObjectURL(b)),
-    };
-    return indice;
+    idbDelPrefix('cat/').catch(() => {}); // restos da versão antiga (um catálogo importado só)
+    const list = (await idbGet('books')) || [];
+    return await Promise.all(list.map(async (b) => {
+      const indice = await idbGet(`book/${b.id}/indice`);
+      const telas = await Promise.all(indice.map((p) => idbGet(`book/${b.id}/tela/${p.pn}`)));
+      const minis = await Promise.all(indice.map((p) => idbGet(`book/${b.id}/mini/${p.pn}`)));
+      localAssets[b.id] = {
+        telas,
+        telaUrls: telas.map((x) => URL.createObjectURL(x)),
+        minis: minis.map((x) => URL.createObjectURL(x)),
+      };
+      return { book: { ...b, local: true }, indice };
+    }));
   } catch {
-    return null;
+    return [];
   }
 }
 
-const miniUrl = (n) => (localCat ? localCat.minis[n - 1] : `miniaturas/${n}.jpg`);
-const telaUrl = (n) => (localCat ? localCat.telaUrls[n - 1] : `telas/${n}.jpg`);
+function miniUrl(n) {
+  const p = pages[n - 1];
+  return localAssets[p.book] ? localAssets[p.book].minis[p.pn - 1] : `catalogos/${p.book}/miniaturas/${p.pn}.jpg`;
+}
+function telaUrl(n) {
+  const p = pages[n - 1];
+  return localAssets[p.book] ? localAssets[p.book].telaUrls[p.pn - 1] : `catalogos/${p.book}/telas/${p.pn}.jpg`;
+}
 
 async function pageBlob(n) {
-  if (localCat) return pdfFromJpgs([localCat.telas[n - 1]]);
-  return (await fetch(`paginas/${n}.pdf`)).blob();
+  const p = pages[n - 1];
+  if (localAssets[p.book]) return pdfFromJpgs([localAssets[p.book].telas[p.pn - 1]]);
+  return (await fetch(`catalogos/${p.book}/paginas/${p.pn}.pdf`)).blob();
 }
-async function catalogBlob() {
-  if (localCat) return pdfFromJpgs(localCat.telas);
-  return (await fetch('catalogo.pdf')).blob();
+async function catalogBlob(id) {
+  if (localAssets[id]) return pdfFromJpgs(localAssets[id].telas);
+  return (await fetch(`catalogos/${id}/catalogo.pdf`)).blob();
 }
 
 // Monta um PDF a partir das imagens das páginas (para enviar/baixar)
@@ -170,27 +183,35 @@ async function importCatalog(file) {
   progress(`Abrindo ${file.name}…`, 0);
   const pdf = await openPdf(file);
   const total = pdf.numPages;
-  await idbDelPrefix('cat/');
+  const id = 'local-' + Date.now().toString(36);
   const linhas = [], textos = [];
-  for (let n = 1; n <= total; n++) {
-    progress(`Processando página ${n} de ${total}…`, (n - 1) / total);
-    const page = await pdf.getPage(n);
-    const { texto, lines } = await pageLines(page);
-    textos.push(texto);
-    linhas.push(lines);
-    const { tela, mini } = await renderPage(page, TELA_W, MINI_W);
-    await idbSet('cat/tela/' + n, tela);
-    await idbSet('cat/mini/' + n, mini);
-    page.cleanup();
+  try {
+    for (let n = 1; n <= total; n++) {
+      progress(`Processando página ${n} de ${total}…`, (n - 1) / total);
+      const page = await pdf.getPage(n);
+      const { texto, lines } = await pageLines(page);
+      textos.push(texto);
+      linhas.push(lines);
+      const { tela, mini } = await renderPage(page, TELA_W, MINI_W);
+      await idbSet(`book/${id}/tela/${n}`, tela);
+      await idbSet(`book/${id}/mini/${n}`, mini);
+      page.cleanup();
+    }
+  } catch (e) {
+    await idbDelPrefix(`book/${id}/`); // não deixa catálogo pela metade
+    throw e;
   }
   const nomes = titulosDe(linhas);
-  await idbSet('cat/indice', textos.map((texto, i) => ({ n: i + 1, titulo: nomes[i], texto })));
-  await idbSet('cat/nome', file.name);
+  await idbSet(`book/${id}/indice`, textos.map((texto, i) => ({ pn: i + 1, titulo: nomes[i], texto })));
+  const nome = file.name.replace(/\.pdf$/i, '').replace(/_/g, ' ').trim();
+  await idbSet('books', [...((await idbGet('books')) || []), { id, nome, paginas: total }]);
+  try { localStorage.setItem('book', id); } catch {} // abre já no catálogo importado
   pdf.destroy();
 }
 
-async function removeLocalCatalog() {
-  await idbDelPrefix('cat/');
+async function removeLocalBook(id) {
+  await idbSet('books', ((await idbGet('books')) || []).filter((b) => b.id !== id));
+  await idbDelPrefix(`book/${id}/`);
 }
 
 // ---- Promoções locais ----
@@ -243,8 +264,16 @@ async function removePromo(id) {
 // Guarda no aparelho todas as páginas, miniaturas, PDFs e promoções publicadas.
 // O service worker (sw.js) procura em todos os caches, então depois disso tudo abre sem internet.
 async function cacheAll() {
-  const urls = ['./', 'index.html', 'app.js', 'local.js', 'styles.css', 'manifest.json', 'icon.svg', 'indice.json', 'catalogo.pdf'];
-  if (!localCat) for (const p of pages) urls.push(`miniaturas/${p.n}.jpg`, `telas/${p.n}.jpg`, `paginas/${p.n}.pdf`);
+  const urls = ['./', 'index.html', 'app.js', 'local.js', 'styles.css', 'manifest.json', 'icon.svg', 'catalogos.json'];
+  for (const b of books) {
+    if (b.local) continue; // importados já estão no aparelho
+    urls.push(`catalogos/${b.id}/indice.json`, `catalogos/${b.id}/catalogo.pdf`);
+  }
+  for (const p of pages) {
+    if (localAssets[p.book]) continue;
+    const base = `catalogos/${p.book}/`;
+    urls.push(`${base}miniaturas/${p.pn}.jpg`, `${base}telas/${p.pn}.jpg`, `${base}paginas/${p.pn}.pdf`);
+  }
   try {
     const res = await fetch('promocoes/promocoes.json', { cache: 'no-cache' });
     if (res.ok) {
@@ -310,13 +339,31 @@ async function runImport(kind, file) {
 }
 
 function openImportDialog() {
-  const info = document.getElementById('imp-info');
-  const back = document.getElementById('imp-reset');
-  info.textContent = localCat ? `Catálogo atual: importado neste tablet (${localCat.nome}).` : 'Catálogo atual: o original publicado.';
-  back.hidden = !localCat;
+  // Catálogos importados neste tablet, cada um com "Remover" (segundo toque confirma)
+  const box = document.getElementById('imp-books');
+  const locais = books.filter((b) => b.local);
+  box.replaceChildren();
+  if (locais.length) {
+    const h = Object.assign(document.createElement('p'), { className: 'muted', textContent: 'Catálogos importados neste tablet:' });
+    box.append(h);
+  }
+  for (const b of locais) {
+    const row = Object.assign(document.createElement('div'), { className: 'cat-row' });
+    const name = Object.assign(document.createElement('b'), { textContent: `${b.nome} (${b.paginas} pág.)` });
+    const del = button('Remover', 'danger', async () => {
+      if (!del.dataset.armed) { del.dataset.armed = '1'; del.textContent = 'Confirmar?'; return; }
+      await removeLocalBook(b.id);
+      location.reload();
+    });
+    row.append(name, del);
+    box.append(row);
+  }
   let quando = null;
   try { quando = localStorage.getItem('offline-em'); } catch {}
-  document.getElementById('off-info').textContent = quando ? `Último download completo: ${quando}. Repita quando o catálogo for atualizado.` : 'Baixa cerca de 90 MB. Use no Wi-Fi.';
+  const mb = Math.round(pages.filter((p) => !localAssets[p.book]).length * 0.6);
+  document.getElementById('off-info').textContent = quando
+    ? `Último download completo: ${quando}. Repita quando os catálogos forem atualizados.`
+    : `Baixa cerca de ${mb} MB. Use no Wi-Fi.`;
   document.getElementById('imp-dlg').showModal();
 }
 
@@ -326,9 +373,3 @@ document.getElementById('imp-cat-btn').onclick = () => document.getElementById('
 document.getElementById('imp-promo-btn').onclick = () => document.getElementById('imp-promo').click();
 document.getElementById('imp-cat').onchange = (e) => { runImport('cat', e.target.files[0]); e.target.value = ''; };
 document.getElementById('imp-promo').onchange = (e) => { runImport('promo', e.target.files[0]); e.target.value = ''; };
-document.getElementById('imp-reset').onclick = async (e) => {
-  const b = e.currentTarget;
-  if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'Toque de novo para confirmar'; return; }
-  await removeLocalCatalog();
-  location.reload();
-};

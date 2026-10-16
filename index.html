@@ -16,6 +16,7 @@
 <header>
   <div class="row">
     <h1>MS Brasil</h1>
+    <div class="cat-wrap book-wrap"><button id="book-btn" class="ghost">📚 Catálogo ▾</button><div id="book-menu" class="menu" hidden></div></div>
     <input id="search" type="search" placeholder="Buscar por nome ou código…" autocomplete="off">
     <button id="clear" class="ghost" title="Limpar busca">✕<span class="ptxt"> Limpar</span></button>
     <button id="promo-btn" title="Promoções">🔥<span class="ptxt"> Promoções</span></button>
@@ -26,7 +27,7 @@
       <option value="nome">Nome do produto</option>
       <option value="conteudo">Conteúdo da ficha</option>
     </select>
-    <div class="cat-wrap"><button id="cat-btn" class="ghost">🏷 Categoria ▾</button><div id="cat-menu" hidden></div></div>
+    <div class="cat-wrap"><button id="cat-btn" class="ghost">🏷 Categoria ▾</button><div id="cat-menu" class="menu" hidden></div></div>
     <div class="seg"><button id="tab-all" class="on">Todas</button><button id="tab-fav">★<span class="ptxt"> Favoritos</span></button></div>
     <div class="seg"><button id="h-uma">▢<span class="ptxt"> Página</span></button><button id="h-cont">☰<span class="ptxt"> Contínuo</span></button></div>
     <span class="grow"></span>
@@ -59,11 +60,11 @@
 <dialog id="imp-dlg">
   <h2>Importar e offline</h2>
   <p class="muted">Escolha um PDF salvo no tablet (por exemplo, recebido pelo WhatsApp e salvo em Arquivos). Fica só neste tablet e funciona sem internet.</p>
-  <button id="imp-cat-btn" class="imp-opt"><b>📘 Catálogo</b><span>PDF — substitui o catálogo deste tablet</span></button>
+  <button id="imp-cat-btn" class="imp-opt"><b>📘 Catálogo</b><span>PDF — entra como mais um catálogo em 📚</span></button>
   <button id="imp-promo-btn" class="imp-opt"><b>🔥 Promoção</b><span>PDF ou imagem — entra na lista de promoções</span></button>
   <button id="off-btn" class="imp-opt"><b>📥 Baixar tudo para usar offline</b><span id="off-info"></span></button>
-  <p id="imp-info" class="muted"></p>
-  <div class="dlg-foot"><button id="imp-reset" class="danger" hidden>Voltar ao catálogo original</button><button id="imp-close">Fechar</button></div>
+  <div id="imp-books"></div>
+  <div class="dlg-foot"><span></span><button id="imp-close">Fechar</button></div>
   <input id="imp-cat" type="file" accept="application/pdf,.pdf" hidden>
   <input id="imp-promo" type="file" accept="application/pdf,.pdf,image/*" hidden>
 </dialog>
