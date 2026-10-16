@@ -260,30 +260,35 @@ async function removePromo(id) {
   await idbDelPrefix(`promo/${id}/`);
 }
 
-// ---- Baixar tudo para usar offline ----
-// Guarda no aparelho todas as páginas, miniaturas, PDFs e promoções publicadas.
-// O service worker (sw.js) procura em todos os caches, então depois disso tudo abre sem internet.
-async function cacheAll() {
-  const urls = ['./', 'index.html', 'app.js', 'local.js', 'styles.css', 'manifest.json', 'icon.svg', 'catalogos.json'];
-  for (const b of books) {
-    if (b.local) continue; // importados já estão no aparelho
-    urls.push(`catalogos/${b.id}/indice.json`, `catalogos/${b.id}/catalogo.pdf`);
-  }
-  for (const p of pages) {
-    if (localAssets[p.book]) continue;
-    const base = `catalogos/${p.book}/`;
-    urls.push(`${base}miniaturas/${p.pn}.jpg`, `${base}telas/${p.pn}.jpg`, `${base}paginas/${p.pn}.pdf`);
-  }
+// ---- Escolher o que fica disponível offline ----
+// Cada catálogo publicado vai para um cache próprio (off-<id>), as promoções para off-promocoes e o app
+// para off-app. Assim dá para baixar só os catálogos que a pessoa usa e apagar um sem mexer nos outros.
+// O service worker (sw.js) procura em todos os caches, então o que foi baixado abre sem internet.
+const OFF_KEY = 'offline2'; // { id: 'dd/mm/aaaa' } do que já foi baixado
+function offState() { try { return JSON.parse(localStorage.getItem(OFF_KEY) || '{}'); } catch { return {}; } }
+function setOffState(s) { try { localStorage.setItem(OFF_KEY, JSON.stringify(s)); } catch {} }
+
+async function promoUrls() {
   try {
     const res = await fetch('promocoes/promocoes.json', { cache: 'no-cache' });
-    if (res.ok) {
-      urls.push('promocoes/promocoes.json');
-      for (const p of await res.json()) urls.push('promocoes/' + p.arquivo, ...p.imagens.map((i) => 'promocoes/' + i));
-    }
-  } catch {}
-  const cache = await caches.open('catalogo-offline');
-  let feitos = 0, falhas = 0;
+    if (!res.ok) return [];
+    const urls = ['promocoes/promocoes.json'];
+    for (const p of await res.json()) urls.push('promocoes/' + p.arquivo, ...p.imagens.map((i) => 'promocoes/' + i));
+    return urls;
+  } catch { return []; }
+}
+function bookUrls(b) {
+  const base = `catalogos/${b.id}/`;
+  const urls = [base + 'indice.json', base + 'catalogo.pdf'];
+  for (let pn = 1; pn <= b.paginas; pn++) urls.push(`${base}miniaturas/${pn}.jpg`, `${base}telas/${pn}.jpg`, `${base}paginas/${pn}.pdf`);
+  return urls;
+}
+
+// Baixa a lista de arquivos para o cache indicado (4 de cada vez), mostrando o progresso
+async function fillCache(name, urls, label, done, total) {
+  const cache = await caches.open(name);
   const fila = [...new Set(urls)];
+  let falhas = 0;
   async function worker() {
     while (fila.length) {
       const url = fila.shift();
@@ -291,23 +296,84 @@ async function cacheAll() {
         const res = await fetch(url, { cache: 'no-cache' });
         if (res.ok) await cache.put(url, res); else falhas++;
       } catch { falhas++; }
-      feitos++;
-      progress(`Baixando ${feitos} de ${urls.length} arquivos…`, feitos / urls.length);
+      done.n++;
+      progress(`${label}: ${done.n} de ${total} arquivos…`, done.n / total);
     }
   }
-  progress('Preparando…', 0);
   await Promise.all([worker(), worker(), worker(), worker()]);
-  progressDone();
-  try { localStorage.setItem('offline-em', new Date().toLocaleDateString('pt-BR')); } catch {}
-  toast(falhas ? `Baixado, mas ${falhas} arquivo(s) falharam. Tente de novo com internet.` : 'Pronto! O catálogo inteiro funciona sem internet.');
+  return falhas;
 }
 
-document.getElementById('off-btn').onclick = () => {
+function openOfflineDialog() {
+  const state = offState();
+  const box = document.getElementById('off-list');
+  box.replaceChildren();
+  const itens = books.filter((b) => !b.local).map((b) => ({ id: b.id, nome: b.nome, mb: b.mb || Math.round(b.paginas * 0.6) }));
+  itens.push({ id: 'promocoes', nome: '🔥 Promoções', mb: 7 });
+  for (const it of itens) {
+    const row = document.createElement('label');
+    row.className = 'off-row';
+    const cb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !!state[it.id] });
+    cb.dataset.id = it.id;
+    cb.dataset.mb = it.mb;
+    const txt = document.createElement('span');
+    const nome = Object.assign(document.createElement('b'), { textContent: it.nome });
+    const info = Object.assign(document.createElement('small'), {
+      textContent: state[it.id] ? `${Math.round(it.mb)} MB · baixado em ${state[it.id]}` : `${Math.round(it.mb)} MB`,
+    });
+    txt.append(nome, info);
+    row.append(cb, txt);
+    box.append(row);
+  }
+  const total = () => [...box.querySelectorAll('input:checked')].reduce((t, c) => t + +c.dataset.mb, 0);
+  const upd = () => (document.getElementById('off-total').textContent = `Selecionado: ${Math.round(total())} MB no aparelho`);
+  box.onchange = upd;
+  upd();
   document.getElementById('imp-dlg').close();
+  document.getElementById('off-dlg').showModal();
+}
+
+async function saveOffline() {
+  document.getElementById('off-dlg').close();
   if (!('caches' in window)) return toast('Este navegador não permite guardar para uso offline (precisa do site em https).');
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
-  cacheAll();
-};
+  const state = offState();
+  const marcados = [...document.querySelectorAll('#off-list input')].map((c) => [c.dataset.id, c.checked]);
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  let falhas = 0;
+  try {
+    // Desmarcados: apaga do aparelho
+    for (const [id, on] of marcados) {
+      if (!on && state[id]) { await caches.delete('off-' + id); delete state[id]; }
+    }
+    // Marcados: baixa (ou atualiza) cada um, mais o próprio app
+    const baixar = marcados.filter(([, on]) => on).map(([id]) => id);
+    if (baixar.length) {
+      const listas = { app: ['./', 'index.html', 'app.js', 'local.js', 'styles.css', 'manifest.json', 'icon.svg', 'catalogos.json'] };
+      for (const id of baixar) listas[id] = id === 'promocoes' ? await promoUrls() : bookUrls(bookById(id));
+      const total = Object.values(listas).reduce((t, l) => t + l.length, 0);
+      const done = { n: 0 };
+      progress('Preparando…', 0);
+      for (const [id, urls] of Object.entries(listas)) {
+        const nome = id === 'app' ? 'App' : id === 'promocoes' ? 'Promoções' : bookById(id).nome;
+        await caches.delete('off-' + id); // começa limpo: tira páginas que saíram do catálogo
+        falhas += await fillCache('off-' + id, urls, nome, done, total);
+        if (id !== 'app') state[id] = hoje;
+        setOffState(state);
+      }
+    }
+  } finally {
+    setOffState(state);
+    progressDone();
+  }
+  toast(falhas ? `Concluído, mas ${falhas} arquivo(s) falharam. Tente de novo com internet.`
+    : marcados.some(([, on]) => on) ? 'Pronto! Os itens marcados funcionam sem internet.' : 'Cópias offline removidas.');
+}
+
+document.getElementById('off-btn').onclick = openOfflineDialog;
+document.getElementById('off-save').onclick = saveOffline;
+document.getElementById('off-close').onclick = () => document.getElementById('off-dlg').close();
+if ('caches' in window) caches.delete('catalogo-offline').catch(() => {}); // cache da versão anterior (tudo junto)
 
 // ---- Tela de importar ----
 function progress(text, frac) {
@@ -358,13 +424,10 @@ function openImportDialog() {
     row.append(name, del);
     box.append(row);
   }
-  let quando = null;
-  try { quando = localStorage.getItem('offline-em'); } catch {}
-  // Tamanho real dos catálogos publicados (calculado pelo preparar.py) + promoções
-  const mb = Math.round(books.filter((b) => !b.local).reduce((t, b) => t + (b.mb || b.paginas * 0.6), 0) + 7);
-  document.getElementById('off-info').textContent = quando
-    ? `Último download completo: ${quando}. Repita quando os catálogos forem atualizados.`
-    : `Baixa cerca de ${mb} MB. Use no Wi-Fi.`;
+  const st = offState(), n = Object.keys(st).length;
+  document.getElementById('off-info').textContent = n
+    ? `${n} item(ns) baixado(s). Toque para mudar ou atualizar.`
+    : 'Escolha quais catálogos baixar para usar sem internet.';
   document.getElementById('imp-dlg').showModal();
 }
 

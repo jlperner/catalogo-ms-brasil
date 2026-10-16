@@ -123,8 +123,8 @@ header .row + .row .cat-wrap { flex-shrink: 1; }
 #promo-view .vbar { background: #c2410c; }
 #promo-view .zap, #promo-zap { background: #25d366; color: #fff; }
 #promo-body { flex: 1; overflow: auto; padding: 20px; }
-.promo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; align-content: start; }
-.promo-grid .card img { aspect-ratio: auto; height: 260px; object-fit: cover; }
+.promo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px; align-content: start; grid-auto-rows: max-content; }
+.promo-grid .card img { height: auto; object-fit: contain; }  /* mesmo formato dos cartões do catálogo, imagem inteira */
 .promo-pages { display: flex; flex-direction: column; align-items: center; gap: 16px; background: #111; }
 .promo-pages img { width: min(100%, 1100px); height: auto; flex: none; background: #fff; }
 .promo-empty { color: var(--muted); text-align: center; font-size: 17px; padding: 40px; }
@@ -158,7 +158,6 @@ header .row + .row .cat-wrap { flex-shrink: 1; }
   .card .info { font-size: 13px; padding: 6px 8px; }
   #edit-bar { top: 92px; font-size: 13px; padding: 8px 10px; }
   .promo-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  .promo-grid .card img { height: 200px; }
   #promo-body { padding: 10px; }
 
   /* Visualizador: título numa linha, botões só com ícone na linha de baixo */
@@ -184,3 +183,12 @@ header .row + .row .cat-wrap { flex-shrink: 1; }
 @media (max-width: 599px) {
   .book-wrap { max-width: 110px; min-width: 60px; }
 }
+
+/* Escolher catálogos offline */
+#off-dlg { border: 0; border-radius: 14px; padding: 20px; width: min(520px, 92vw); }
+#off-dlg::backdrop { background: rgba(0,0,0,.45); }
+#off-dlg h2 { margin: 0 0 6px; font-size: 20px; }
+.off-row { display: flex; gap: 12px; align-items: center; padding: 10px 4px; border-bottom: 1px solid #e5e7eb; cursor: pointer; }
+.off-row input { width: 22px; height: 22px; flex: none; }
+.off-row span { display: flex; flex-direction: column; }
+.off-row small { color: var(--muted); }
