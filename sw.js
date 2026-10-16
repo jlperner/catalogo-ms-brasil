@@ -3,12 +3,20 @@
 // Na instalação o app já guarda a tela, a lista de catálogos e os índices de busca, para abrir sem
 // internet mesmo que a pessoa só tenha aberto uma vez. As páginas ficam a cargo de "Usar sem internet"
 // (caches off-*, ver local.js).
-const CACHE = 'catalogo-v30';
+const CACHE = 'catalogo-v31';
 const APP = ['./', 'index.html', 'app.js', 'local.js', 'styles.css', 'manifest.json', 'icon.svg', 'catalogos.json'];
+
+// Bibliotecas de PDF (juntar páginas escolhidas, importar PDF): guardadas também, para funcionar sem internet
+const LIBS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+  'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js',
+];
 
 async function precache() {
   const cache = await caches.open(CACHE);
   await cache.addAll(APP.map((u) => new Request(u, { cache: 'no-cache' })));
+  try { await cache.addAll(LIBS); } catch {}
   try {
     const lista = await (await fetch('catalogos.json', { cache: 'no-cache' })).json();
     await cache.addAll(lista.map((b) => new Request(`catalogos/${b.id}/indice.json`, { cache: 'no-cache' })));
