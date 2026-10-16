@@ -505,7 +505,6 @@ function openImportDialog() {
   document.getElementById('imp-dlg').showModal();
 }
 
-document.getElementById('imp-btn').onclick = openImportDialog;
 document.getElementById('imp-close').onclick = () => document.getElementById('imp-dlg').close();
 document.getElementById('imp-cat-btn').onclick = () => document.getElementById('imp-cat').click();
 document.getElementById('imp-promo-btn').onclick = () => document.getElementById('imp-promo').click();

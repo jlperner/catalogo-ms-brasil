@@ -330,9 +330,6 @@ function setLeitura(m) {
   marcarLeitura();
   if (!$('viewer').hidden) openViewer(current);
 }
-// Pelos botões do topo, o catálogo sempre abre do começo
-$('h-uma').onclick = () => { setLeitura('uma'); openViewer(seq()[0].n); };
-$('h-cont').onclick = () => { setLeitura('continuo'); openViewer(seq()[0].n); };
 marcarLeitura();
 $('m-uma').onclick = () => setLeitura('uma');
 $('m-cont').onclick = () => setLeitura('continuo');
@@ -391,6 +388,7 @@ function chosenBook() {
 }
 function openSendMenu(btn, acao) {
   const menu = $('send-menu');
+  setTimeout(() => (menu.hidden = false)); // abre depois do clique que fechou o ⋯
   menu.replaceChildren(
     button('📘 Catálogo inteiro', '', () => { menu.hidden = true; wholeCatalog(acao); }),
     button('✔ Escolher páginas…', '', () => { menu.hidden = true; startPicking(); }),
@@ -409,8 +407,6 @@ async function wholeCatalog(acao) {
   if (acao === 'baixar') return download(f);
   if (!(await shareFile(f, b.nome))) toast('Este aparelho não permite compartilhar arquivos. Use "Baixar".');
 }
-$('share-all').onclick = (e) => { e.stopPropagation(); openSendMenu(e.currentTarget, 'enviar'); };
-$('download-all').onclick = (e) => { e.stopPropagation(); openSendMenu(e.currentTarget, 'baixar'); };
 document.addEventListener('click', (e) => { if (!$('send-menu').contains(e.target)) $('send-menu').hidden = true; });
 
 // ---- Escolher páginas para enviar ou baixar ----
@@ -577,7 +573,6 @@ function openCatMenu() {
 }
 $('cat-btn').onclick = (e) => { e.stopPropagation(); $('cat-menu').hidden ? openCatMenu() : ($('cat-menu').hidden = true); };
 document.addEventListener('click', (e) => { if (!$('cat-menu').contains(e.target)) $('cat-menu').hidden = true; });
-$('cat-gear').onclick = () => openCatsDialog();
 
 // Aviso curto no rodapé (no lugar das caixas de mensagem do navegador)
 let toastTimer;
@@ -773,9 +768,35 @@ $('promo-btn').onclick = () => pickBook(bookFilter === PROMO ? '' : PROMO);
 let t;
 $('search').oninput = () => { clearTimeout(t); t = setTimeout(render, 200); };
 $('search-mode').onchange = render;
-$('clear').onclick = () => { $('search').value = ''; render(); $('search').focus(); };
-$('tab-all').onclick = () => { mode = 'all'; $('tab-all').classList.add('on'); $('tab-fav').classList.remove('on'); render(); };
-$('tab-fav').onclick = () => { mode = 'fav'; $('tab-fav').classList.add('on'); $('tab-all').classList.remove('on'); render(); };
+$('clear').onclick = () => { $('search').value = ''; $('clear').hidden = true; render(); $('search').focus(); };
+$('search').addEventListener('input', () => { $('clear').hidden = !$('search').value; });
+// ★ liga e desliga "só favoritos"
+$('tab-fav').onclick = () => {
+  mode = mode === 'fav' ? 'all' : 'fav';
+  $('tab-fav').classList.toggle('on', mode === 'fav');
+  render();
+};
+
+// ---- ⋯ Mais: as ações que não se usam a toda hora ----
+function openMoreMenu() {
+  const menu = $('more-menu');
+  const fecha = (fn) => () => { menu.hidden = true; fn(); };
+  menu.replaceChildren(
+    button('↗ Enviar…', '', fecha(() => openSendMenu($('more-btn'), 'enviar'))),
+    button('⬇ Baixar…', '', fecha(() => openSendMenu($('more-btn'), 'baixar'))),
+    button('⬆ Importar arquivo', '', fecha(openImportDialog)),
+    button('📥 Usar sem internet', '', fecha(openOfflineDialog)),
+    button('📚 Gerenciar catálogos', '', fecha(openBooksDialog)),
+    button('🏷 Gerenciar categorias', '', fecha(openCatsDialog)),
+  );
+  menu.hidden = false;
+}
+$('more-btn').onclick = (e) => { e.stopPropagation(); $('more-menu').hidden ? openMoreMenu() : ($('more-menu').hidden = true); };
+document.addEventListener('click', (e) => { if (!$('more-menu').contains(e.target)) $('more-menu').hidden = true; });
+
+// As faixas (amarela/verde) ficam logo abaixo do topo, qualquer que seja a altura dele
+const header = document.querySelector('header');
+new ResizeObserver(() => document.documentElement.style.setProperty('--hh', header.offsetHeight + 'px')).observe(header);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 init();

@@ -3,7 +3,7 @@
 // Na instalação o app já guarda a tela, a lista de catálogos e os índices de busca, para abrir sem
 // internet mesmo que a pessoa só tenha aberto uma vez. As páginas ficam a cargo de "Usar sem internet"
 // (caches off-*, ver local.js).
-const CACHE = 'catalogo-v29';
+const CACHE = 'catalogo-v30';
 const APP = ['./', 'index.html', 'app.js', 'local.js', 'styles.css', 'manifest.json', 'icon.svg', 'catalogos.json'];
 
 async function precache() {

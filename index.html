@@ -14,27 +14,20 @@
 <body>
 
 <header>
-  <div class="row">
-    <h1>MS Brasil</h1>
-    <div class="cat-wrap book-wrap"><button id="book-btn" class="ghost">📚 Catálogo ▾</button><div id="book-menu" class="menu" hidden></div></div>
-    <input id="search" type="search" placeholder="Buscar por nome ou código…" autocomplete="off">
-    <button id="clear" class="ghost" title="Limpar busca">✕<span class="ptxt"> Limpar</span></button>
-    <button id="promo-btn" title="Promoções">🔥<span class="ptxt"> Promoções</span></button>
-    <button id="imp-btn" class="ghost" title="Importar PDF">⬆<span class="txt"> Importar</span></button>
-  </div>
-  <div class="row">
+  <h1>MS Brasil</h1>
+  <div class="cat-wrap book-wrap"><button id="book-btn" class="ghost">📚 Catálogo ▾</button><div id="book-menu" class="menu" hidden></div></div>
+  <div class="search-box">
+    <input id="search" type="search" placeholder="Buscar nome ou código…" autocomplete="off">
+    <button id="clear" title="Limpar busca" hidden>✕</button>
     <select id="search-mode" title="Onde procurar">
-      <option value="nome">Nome do produto</option>
-      <option value="conteudo">Conteúdo da ficha</option>
+      <option value="nome">Nome</option>
+      <option value="conteudo">Conteúdo</option>
     </select>
-    <div class="cat-wrap"><button id="cat-btn" class="ghost">🏷 Categoria ▾</button><div id="cat-menu" class="menu" hidden></div></div>
-    <div class="seg"><button id="tab-all" class="on">Todas</button><button id="tab-fav">★<span class="ptxt"> Favoritos</span></button></div>
-    <div class="seg"><button id="h-uma">▢<span class="ptxt"> Página</span></button><button id="h-cont">☰<span class="ptxt"> Contínuo</span></button></div>
-    <span class="grow"></span>
-    <button id="share-all" class="ghost" title="Enviar catálogo">↗<span class="txt"> Enviar</span></button>
-    <button id="download-all" class="ghost" title="Baixar catálogo">⬇<span class="txt"> Baixar</span></button>
-    <button id="cat-gear" class="ghost" title="Gerenciar categorias">⚙</button>
   </div>
+  <div class="cat-wrap"><button id="cat-btn" class="ghost">🏷 Categoria ▾</button><div id="cat-menu" class="menu" hidden></div></div>
+  <button id="tab-fav" class="ghost" title="Mostrar só os favoritos">★<span class="txt"> Favoritos</span></button>
+  <button id="promo-btn" title="Promoções">🔥<span class="txt"> Promoções</span></button>
+  <div class="more-wrap"><button id="more-btn" class="ghost" title="Mais opções">⋯</button><div id="more-menu" class="menu" hidden></div></div>
 </header>
 <div id="edit-bar">
   <span class="edit-lbl">Escolhendo páginas para</span>

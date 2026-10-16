@@ -65,7 +65,7 @@ main { padding: 20px; }
 /* Categorias */
 #cat-btn { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
 header .active-cat { background: #fbbf24; color: #1b1b1b; }
-#edit-bar { display: none; position: sticky; top: 96px; z-index: 4; gap: 12px; align-items: center;
+#edit-bar { display: none; position: sticky; top: var(--hh, 60px); z-index: 4; gap: 12px; align-items: center;
   padding: 10px 16px; background: #fef3c7; color: #78350f; font-size: 15px; }
 body.editing #edit-bar { display: flex; }
 #edit-bar #edit-text { flex: 1; }
@@ -161,7 +161,7 @@ header .row + .row .cat-wrap { flex-shrink: 1; }
   main { padding: 10px; }
   #grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .card .info { font-size: 13px; padding: 6px 8px; }
-  #edit-bar { top: 92px; font-size: 13px; padding: 8px 10px; }
+  #edit-bar { font-size: 13px; padding: 8px 10px; }
   .promo-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   #promo-body { padding: 10px; }
 
@@ -203,7 +203,7 @@ header .row + .row .cat-wrap { flex-shrink: 1; }
 #promo-btn.promo-on { background: #fff; color: #c2410c; box-shadow: inset 0 0 0 2px #f97316; }
 
 /* Escolher páginas para enviar */
-#pick-bar { display: none; position: sticky; top: 96px; z-index: 4; gap: 8px; align-items: center; flex-wrap: wrap;
+#pick-bar { display: none; position: sticky; top: var(--hh, 60px); z-index: 4; gap: 8px; align-items: center; flex-wrap: wrap;
   padding: 10px 16px; background: #dcfce7; color: #14532d; font-size: 15px; }
 body.picking #pick-bar { display: flex; }
 #pick-text { flex: 1; font-weight: 600; }
@@ -213,7 +213,7 @@ body.picking #pick-bar { display: flex; }
 body.picking .card .star { display: none; }
 body.picking .card:not(.sel) img { opacity: .8; }
 #send-menu { position: fixed; z-index: 30; min-width: 240px; }
-@media (max-width: 599px) { #pick-bar { top: 92px; font-size: 13px; padding: 8px 10px; } #pick-bar button { padding: 0 10px; } }
+@media (max-width: 599px) { #pick-bar { font-size: 13px; padding: 8px 10px; } #pick-bar button { padding: 0 10px; } }
 
 /* Conferir páginas escolhidas */
 #pick-dlg { border: 0; border-radius: 14px; padding: 20px; width: min(620px, 94vw); max-height: 86vh; }
@@ -238,3 +238,42 @@ body.picking .card:not(.sel) img { opacity: .8; }
 #books-dlg .cat-row b { flex: 1 1 200px; }
 #books-dlg .cat-row .muted { flex: 1 1 100%; order: 1; }
 #books-hidden { margin-top: 14px; }
+
+/* ---- Barra do topo em uma linha (sugestão 1) ---- */
+header { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px; }
+header > * { flex-shrink: 0; }
+/* mesmo estilo para todos os botões; laranja só no 🔥 */
+header button, header .ghost { height: 38px; border-radius: 10px; background: rgba(255,255,255,.14); color: #fff; font-size: 14px; }
+header button.on, #tab-fav.on { background: #fff; color: var(--pri); }
+#promo-btn { background: #f97316; color: #fff; font-weight: 600; }
+#promo-btn.promo-on { background: #fff; color: #c2410c; box-shadow: inset 0 0 0 2px #f97316; }
+/* busca com o ✕ e o Nome/Conteúdo por dentro */
+.search-box { flex: 1 1 260px; max-width: 760px; min-width: 0; display: flex; align-items: center; height: 40px;
+  background: #fff; border-radius: 10px; overflow: hidden; }
+.search-box #search { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; padding: 0 14px; font-size: 16px; background: transparent; }
+.search-box #clear { height: 30px; width: 30px; padding: 0; margin-right: 4px; border-radius: 50%; background: #e5e7eb; color: #374151; font-size: 14px; }
+.search-box #search-mode { height: 100%; width: auto; border: 0; border-left: 1px solid #e5e7eb; border-radius: 0; padding: 0 8px;
+  background: #f9fafb; color: #374151; font-size: 14px; cursor: pointer; }
+.more-wrap { position: relative; }
+#more-btn { width: 42px; padding: 0; font-size: 20px; line-height: 1; }
+#more-menu { left: auto; right: 0; min-width: 230px; }
+@media (max-width: 1000px) {
+  header .txt { display: none; }
+  #book-btn, #cat-btn { max-width: 150px; }
+}
+/* celular: a busca desce para a segunda linha, ocupando a largura toda */
+@media (max-width: 599px) {
+  .search-box { order: 10; flex-basis: 100%; max-width: none; }
+  .book-wrap { flex: 1 1 auto; max-width: none; }
+  #book-btn { max-width: none; }
+  #cat-btn { max-width: 110px; }
+  #more-menu { position: absolute; left: auto; right: 0; top: 44px; }
+}
+.search-box #search-mode { flex: none; width: 104px; }
+@media (max-width: 1000px) { #book-btn, #cat-btn { max-width: 130px; } .search-box { flex-basis: 200px; } }
+@media (max-width: 599px) {
+  .book-wrap { flex: 1 1 0; min-width: 0; }
+  header .cat-wrap:not(.book-wrap) { flex: 0 1 auto; min-width: 0; }
+  #cat-btn { max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
+  #tab-fav, #promo-btn, #more-btn { width: 40px; padding: 0; }
+}
