@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Catálogo MS Brasil</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1f3a5f">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="row">
+    <h1>MS Brasil</h1>
+    <input id="search" type="search" placeholder="Buscar por nome ou código…" autocomplete="off">
+    <button id="clear" class="ghost" title="Limpar busca">✕<span class="ptxt"> Limpar</span></button>
+    <button id="promo-btn" title="Promoções">🔥<span class="ptxt"> Promoções</span></button>
+    <button id="imp-btn" class="ghost" title="Importar PDF">⬆<span class="txt"> Importar</span></button>
+  </div>
+  <div class="row">
+    <select id="search-mode" title="Onde procurar">
+      <option value="nome">Nome do produto</option>
+      <option value="conteudo">Conteúdo da ficha</option>
+    </select>
+    <div class="cat-wrap"><button id="cat-btn" class="ghost">🏷 Categoria ▾</button><div id="cat-menu" hidden></div></div>
+    <div class="seg"><button id="tab-all" class="on">Todas</button><button id="tab-fav">★<span class="ptxt"> Favoritos</span></button></div>
+    <div class="seg"><button id="h-uma">▢<span class="ptxt"> Página</span></button><button id="h-cont">☰<span class="ptxt"> Contínuo</span></button></div>
+    <span class="grow"></span>
+    <button id="share-all" class="ghost" title="Enviar catálogo">↗<span class="txt"> Enviar</span></button>
+    <button id="download-all" class="ghost" title="Baixar catálogo">⬇<span class="txt"> Baixar</span></button>
+    <button id="cat-gear" class="ghost" title="Gerenciar categorias">⚙</button>
+  </div>
+</header>
+<div id="edit-bar"><span id="edit-text"></span><button id="edit-done">✓ Concluir</button></div>
+
+<dialog id="cats-dlg">
+  <h2>Gerenciar categorias</h2>
+  <div id="cats-list"></div>
+  <div class="cat-new">
+    <input id="cat-new" placeholder="Nova categoria (ex.: Posto)">
+    <button id="cat-new-btn" class="pri">+ Criar</button>
+  </div>
+  <div class="dlg-foot"><span class="muted">Ficam salvas neste tablet. Use "Compartilhar" para mandar para a equipe.</span><button id="cats-close">Fechar</button></div>
+</dialog>
+
+<dialog id="recv-dlg">
+  <h2>Categoria recebida</h2>
+  <p id="recv-text"></p>
+  <label class="muted">Nome: <input id="recv-name" class="cat-rename"></label>
+  <div class="dlg-foot"><button id="recv-cancel">Agora não</button><button id="recv-save" class="pri">Salvar</button></div>
+</dialog>
+
+<div id="toast"></div>
+
+<dialog id="imp-dlg">
+  <h2>Importar arquivo</h2>
+  <p class="muted">Escolha um PDF salvo no tablet (por exemplo, recebido pelo WhatsApp e salvo em Arquivos). Fica só neste tablet e funciona sem internet.</p>
+  <button id="imp-cat-btn" class="imp-opt"><b>📘 Catálogo</b><span>PDF — substitui o catálogo deste tablet</span></button>
+  <button id="imp-promo-btn" class="imp-opt"><b>🔥 Promoção</b><span>PDF ou imagem — entra na lista de promoções</span></button>
+  <p id="imp-info" class="muted"></p>
+  <div class="dlg-foot"><button id="imp-reset" class="danger" hidden>Voltar ao catálogo original</button><button id="imp-close">Fechar</button></div>
+  <input id="imp-cat" type="file" accept="application/pdf,.pdf" hidden>
+  <input id="imp-promo" type="file" accept="application/pdf,.pdf,image/*" hidden>
+</dialog>
+
+<div id="prog" hidden>
+  <div class="prog-box">
+    <b>Importando…</b>
+    <p id="prog-text"></p>
+    <div class="prog-track"><div id="prog-bar"></div></div>
+    <p class="muted">Não feche o app até terminar.</p>
+  </div>
+</div>
+
+<main>
+  <div id="status">Carregando catálogo…</div>
+  <div id="grid"></div>
+</main>
+
+<div id="promo-view" hidden>
+  <div class="vbar">
+    <button id="promo-back">✕<span class="ptxt"> Fechar</span></button>
+    <span id="promo-title">🔥 Promoções</span>
+    <button id="promo-zap" class="zap" hidden>WhatsApp</button>
+    <button id="promo-mail" hidden>✉<span class="ptxt"> E-mail</span></button>
+    <button id="promo-share" hidden>↗<span class="ptxt"> Enviar</span></button>
+    <button id="promo-down" hidden>⬇<span class="ptxt"> Baixar</span></button>
+    <button id="promo-del" class="danger" hidden>Remover</button>
+  </div>
+  <div id="promo-body"></div>
+</div>
+
+<div id="viewer" hidden>
+  <div class="vbar">
+    <button id="v-close">✕<span class="ptxt"> Fechar</span></button>
+    <div class="seg"><button id="m-uma">▢<span class="ptxt"> Página</span></button><button id="m-cont">☰<span class="ptxt"> Contínuo</span></button></div>
+    <span id="v-title"></span>
+    <button id="v-prev">‹</button>
+    <button id="v-next">›</button>
+    <button id="v-fav">☆</button>
+    <button id="v-zap">WhatsApp</button>
+    <button id="v-mail">✉<span class="ptxt"> E-mail</span></button>
+    <button id="v-share">↗<span class="ptxt"> Enviar página</span></button>
+    <button id="v-down">⬇<span class="ptxt"> Baixar página</span></button>
+  </div>
+  <div id="v-wrap"><img id="v-img" alt=""><div id="v-list"></div></div>
+  <button id="side-prev" class="side" title="Página anterior">‹</button>
+  <button id="side-next" class="side" title="Próxima página">›</button>
+</div>
+
+<script src="local.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
