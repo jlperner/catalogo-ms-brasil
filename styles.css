@@ -192,3 +192,4 @@ header .row + .row .cat-wrap { flex-shrink: 1; }
 .off-row input { width: 22px; height: 22px; flex: none; }
 .off-row span { display: flex; flex-direction: column; }
 .off-row small { color: var(--muted); }
+.off-row small.off-old { color: #b45309; font-weight: 600; }

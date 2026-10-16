@@ -180,6 +180,16 @@ function titulosDe(todas) {
 }
 
 async function importCatalog(file) {
+  // Mesmo arquivo (nome e tamanho) já importado: não importa de novo.
+  // Mesmo nome com tamanho diferente: é uma versão nova, que substitui a anterior ao terminar.
+  const nome = file.name.replace(/\.pdf$/i, '').replace(/_/g, ' ').trim();
+  const antes = (await idbGet('books')) || [];
+  const igual = antes.find((b) => b.nome === nome && b.tamanho === file.size);
+  if (igual) {
+    try { localStorage.setItem('book', igual.id); } catch {}
+    return 'igual';
+  }
+  const anterior = antes.find((b) => b.nome === nome);
   progress(`Abrindo ${file.name}…`, 0);
   const pdf = await openPdf(file);
   const total = pdf.numPages;
@@ -203,10 +213,11 @@ async function importCatalog(file) {
   }
   const nomes = titulosDe(linhas);
   await idbSet(`book/${id}/indice`, textos.map((texto, i) => ({ pn: i + 1, titulo: nomes[i], texto })));
-  const nome = file.name.replace(/\.pdf$/i, '').replace(/_/g, ' ').trim();
-  await idbSet('books', [...((await idbGet('books')) || []), { id, nome, paginas: total }]);
+  await idbSet('books', [...((await idbGet('books')) || []), { id, nome, paginas: total, tamanho: file.size }]);
+  if (anterior) await removeLocalBook(anterior.id);
   try { localStorage.setItem('book', id); } catch {} // abre já no catálogo importado
   pdf.destroy();
+  return anterior ? 'atualizado' : 'novo';
 }
 
 async function removeLocalBook(id) {
@@ -304,8 +315,25 @@ async function fillCache(name, urls, label, done, total) {
   return falhas;
 }
 
-function openOfflineDialog() {
+// Versão de cada item, para saber se o que está no aparelho ainda é o atual.
+// Catálogo: a assinatura do PDF (preparar.py). Promoções: um resumo do promocoes.json.
+let promoVersion = '';
+async function itemVersion(id) {
+  if (id !== 'promocoes') return bookById(id)?.assinatura || '';
+  try {
+    const t = await (await fetch('promocoes/promocoes.json', { cache: 'no-cache' })).text();
+    let h = 0;
+    for (const c of t) h = (h * 31 + c.charCodeAt(0)) | 0;
+    return `${t.length}-${h}`;
+  } catch { return promoVersion; }
+}
+// state[id] = { data, v }  (versões antigas do app guardavam só a data)
+const offData = (x) => (typeof x === 'string' ? x : x?.data);
+const offAtual = (x, v) => !!x && typeof x === 'object' && !!v && x.v === v;
+
+async function openOfflineDialog() {
   const state = offState();
+  promoVersion = await itemVersion('promocoes');
   const box = document.getElementById('off-list');
   box.replaceChildren();
   const itens = books.filter((b) => !b.local).map((b) => ({ id: b.id, nome: b.nome, mb: b.mb || Math.round(b.paginas * 0.6) }));
@@ -318,9 +346,13 @@ function openOfflineDialog() {
     cb.dataset.mb = it.mb;
     const txt = document.createElement('span');
     const nome = Object.assign(document.createElement('b'), { textContent: it.nome });
+    const v = it.id === 'promocoes' ? promoVersion : bookById(it.id).assinatura;
     const info = Object.assign(document.createElement('small'), {
-      textContent: state[it.id] ? `${Math.round(it.mb)} MB · baixado em ${state[it.id]}` : `${Math.round(it.mb)} MB`,
+      textContent: !state[it.id] ? `${Math.round(it.mb)} MB`
+        : offAtual(state[it.id], v) ? `${Math.round(it.mb)} MB · baixado em ${offData(state[it.id])} · em dia`
+        : `${Math.round(it.mb)} MB · baixado em ${offData(state[it.id])} · ⚠ atualização disponível`,
     });
+    if (state[it.id] && !offAtual(state[it.id], v)) info.classList.add('off-old');
     txt.append(nome, info);
     row.append(cb, txt);
     box.append(row);
@@ -340,16 +372,20 @@ async function saveOffline() {
   const state = offState();
   const marcados = [...document.querySelectorAll('#off-list input')].map((c) => [c.dataset.id, c.checked]);
   const hoje = new Date().toLocaleDateString('pt-BR');
-  let falhas = 0;
+  let falhas = 0, emDia = 0, baixados = 0;
   try {
     // Desmarcados: apaga do aparelho
     for (const [id, on] of marcados) {
       if (!on && state[id]) { await caches.delete('off-' + id); delete state[id]; }
     }
-    // Marcados: baixa (ou atualiza) cada um, mais o próprio app
-    const baixar = marcados.filter(([, on]) => on).map(([id]) => id);
+    // Marcados: baixa só o que ainda não está no aparelho ou mudou desde o último download
+    const versoes = {};
+    for (const [id, on] of marcados) if (on) versoes[id] = await itemVersion(id);
+    const baixar = marcados.filter(([id, on]) => on && !offAtual(state[id], versoes[id])).map(([id]) => id);
+    emDia = marcados.filter(([, on]) => on).length - baixar.length;
+    baixados = baixar.length;
     if (baixar.length) {
-      const listas = { app: ['./', 'index.html', 'app.js', 'local.js', 'styles.css', 'manifest.json', 'icon.svg', 'catalogos.json'] };
+      const listas ={ app: ['./', 'index.html', 'app.js', 'local.js', 'styles.css', 'manifest.json', 'icon.svg', 'catalogos.json'] };
       for (const id of baixar) listas[id] = id === 'promocoes' ? await promoUrls() : bookUrls(bookById(id));
       const total = Object.values(listas).reduce((t, l) => t + l.length, 0);
       const done = { n: 0 };
@@ -358,7 +394,7 @@ async function saveOffline() {
         const nome = id === 'app' ? 'App' : id === 'promocoes' ? 'Promoções' : bookById(id).nome;
         await caches.delete('off-' + id); // começa limpo: tira páginas que saíram do catálogo
         falhas += await fillCache('off-' + id, urls, nome, done, total);
-        if (id !== 'app') state[id] = hoje;
+        if (id !== 'app') state[id] = { data: hoje, v: versoes[id] };
         setOffState(state);
       }
     }
@@ -367,7 +403,9 @@ async function saveOffline() {
     progressDone();
   }
   toast(falhas ? `Concluído, mas ${falhas} arquivo(s) falharam. Tente de novo com internet.`
-    : marcados.some(([, on]) => on) ? 'Pronto! Os itens marcados funcionam sem internet.' : 'Cópias offline removidas.');
+    : baixados ? `Pronto! ${baixados} item(ns) baixado(s)${emDia ? `, ${emDia} já estava(m) em dia` : ''}. Funciona sem internet.`
+    : emDia ? 'Tudo já estava baixado e em dia. Nada para baixar.'
+    : 'Cópias offline removidas.');
 }
 
 document.getElementById('off-btn').onclick = openOfflineDialog;
@@ -389,8 +427,14 @@ async function runImport(kind, file) {
   try {
     if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
     if (kind === 'cat') {
-      await importCatalog(file);
-      progress('Pronto! Abrindo o catálogo importado…', 1);
+      const r = await importCatalog(file);
+      if (r === 'igual') {
+        // já existe: só mostra o catálogo, sem processar de novo
+        toast(`"${file.name}" já foi importado neste tablet. Mostrando o catálogo.`);
+        pickBook(localStorage.getItem('book') || '');
+        return;
+      }
+      progress(r === 'atualizado' ? 'Pronto! Versão anterior substituída. Abrindo…' : 'Pronto! Abrindo o catálogo importado…', 1);
       location.reload();
     } else {
       await importPromo(file);
