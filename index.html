@@ -81,6 +81,12 @@
 
 <div id="toast"></div>
 
+<div id="install-bar" hidden>
+  <span id="install-text"></span>
+  <button id="install-go" class="pri" hidden>Instalar</button>
+  <button id="install-later">Agora não</button>
+</div>
+
 <dialog id="imp-dlg">
   <h2>Importar e offline</h2>
   <p class="muted">Escolha um PDF salvo no tablet (por exemplo, recebido pelo WhatsApp e salvo em Arquivos). Fica só neste tablet e funciona sem internet.</p>
@@ -98,6 +104,7 @@
   <p class="muted">Marque os catálogos que você quer ter no aparelho. Desmarcar apaga a cópia e libera espaço. Use no Wi-Fi e repita quando os catálogos forem atualizados.</p>
   <div id="off-list"></div>
   <p id="off-total" class="muted"></p>
+  <p id="off-storage" class="off-storage" hidden></p>
   <div class="dlg-foot"><button id="off-close">Cancelar</button><button id="off-save" class="pri">Salvar</button></div>
 </dialog>
 

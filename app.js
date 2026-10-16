@@ -77,6 +77,7 @@ async function init() {
   fillBookBtn();
   loadCats();
   render();
+  protectOnStart();
 }
 
 // ---- 📚 Escolher catálogo ----

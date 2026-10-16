@@ -385,6 +385,7 @@ async function openOfflineDialog() {
   upd();
   document.getElementById('imp-dlg').close();
   document.getElementById('off-dlg').showModal();
+  showStorageInfo();
 }
 
 async function saveOffline() {
@@ -428,6 +429,96 @@ async function saveOffline() {
     : baixados ? `Pronto! ${baixados} item(ns) baixado(s)${emDia ? `, ${emDia} já estava(m) em dia` : ''}. Funciona sem internet.`
     : emDia ? 'Tudo já estava baixado e em dia. Nada para baixar.'
     : 'Cópias offline removidas.');
+}
+
+// ---- Proteção do que está guardado no aparelho ----
+const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+// Indicador na tela "Usar sem internet": protegido ou não, e quanto está guardado
+async function showStorageInfo() {
+  const el = document.getElementById('off-storage');
+  if (!navigator.storage?.estimate) { el.hidden = true; return; }
+  let persisted = false;
+  try { persisted = (await navigator.storage.persisted()) || (await navigator.storage.persist()); } catch {}
+  let usado = 0;
+  try { usado = (await navigator.storage.estimate()).usage || 0; } catch {}
+  const mb = Math.round(usado / 1048576);
+  el.hidden = false;
+  el.className = 'off-storage ' + (persisted ? 'ok' : 'warn');
+  el.textContent = persisted
+    ? `🔒 Protegido · ${mb} MB guardados neste aparelho. O sistema não apaga sozinho.`
+    : `⚠ Não protegido · ${mb} MB guardados. ${isInstalled()
+      ? 'O sistema pode apagar se faltar espaço. Deixe espaço livre no aparelho.'
+      : isIOS() ? 'Para proteger: Safari → Compartilhar → Adicionar à Tela de Início, e use sempre pelo ícone.'
+      : 'Para proteger: no Chrome, menu ⋮ → Instalar app, e use sempre pelo ícone.'}`;
+}
+
+// Recuperação automática: se o que foi marcado em "Usar sem internet" sumiu do aparelho,
+// baixa de novo sozinho quando houver internet (não baixa atualizações sem a pessoa pedir).
+async function recoverOffline() {
+  if (!('caches' in window) || !navigator.onLine) return;
+  const state = offState();
+  const faltando = [];
+  for (const id of Object.keys(state)) {
+    const b = bookById(id);
+    if (!b) continue;
+    const primeira = pages.find((p) => p.book === id);
+    const cache = (await caches.keys()).includes('off-' + id) ? await caches.open('off-' + id) : null;
+    const ok = cache && primeira && (await cache.match(`catalogos/${id}/telas/${primeira.pn}.jpg`));
+    if (!ok) faltando.push(b);
+  }
+  if (!faltando.length) return;
+  toast(`Recuperando a cópia offline de ${faltando.map((b) => b.nome).join(', ')}…`);
+  const total = faltando.reduce((t, b) => t + bookUrls(b).length, 0);
+  const done = { n: 0 };
+  let falhas = 0;
+  try {
+    for (const b of faltando) {
+      await caches.delete('off-' + b.id);
+      falhas += await fillCache('off-' + b.id, bookUrls(b), 'Recuperando ' + b.nome, done, total);
+    }
+  } finally {
+    progressDone();
+  }
+  toast(falhas ? 'Recuperação incompleta. Tente de novo com internet em ⋯ → Usar sem internet.' : 'Cópia offline recuperada. Funciona sem internet.');
+}
+
+// Aviso para instalar na tela inicial (só em tablet/celular, fora do app instalado)
+let installEvent = null;
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; showInstallBanner(); });
+function showInstallBanner() {
+  const bar = document.getElementById('install-bar');
+  if (isInstalled() || !matchMedia('(pointer: coarse)').matches) return;
+  let adiado = 0;
+  try { adiado = +localStorage.getItem('install-adiado') || 0; } catch {}
+  if (Date.now() - adiado < 3 * 86400000) return; // "Agora não" vale por 3 dias
+  document.getElementById('install-text').innerHTML = isIOS()
+    ? '<b>Instale o app para usar sem internet com segurança:</b> toque em <b>Compartilhar</b> (□↑) e depois em <b>Adicionar à Tela de Início</b>. Use sempre pelo ícone.'
+    : installEvent
+      ? '<b>Instale o app para usar sem internet com segurança.</b>'
+      : '<b>Instale o app para usar sem internet com segurança:</b> no menu <b>⋮</b> do Chrome, toque em <b>Instalar app</b> (ou Adicionar à tela inicial).';
+  document.getElementById('install-go').hidden = !installEvent;
+  bar.hidden = false;
+}
+document.getElementById('install-go').onclick = async () => {
+  if (!installEvent) return;
+  installEvent.prompt();
+  await installEvent.userChoice.catch(() => {});
+  installEvent = null;
+  document.getElementById('install-bar').hidden = true;
+};
+document.getElementById('install-later').onclick = () => {
+  try { localStorage.setItem('install-adiado', Date.now()); } catch {}
+  document.getElementById('install-bar').hidden = true;
+};
+addEventListener('appinstalled', () => (document.getElementById('install-bar').hidden = true));
+
+// Ao abrir: pede a proteção (o app instalado costuma receber), mostra o aviso e recupera o que sumiu
+function protectOnStart() {
+  if (navigator.storage?.persist && isInstalled()) navigator.storage.persist().catch(() => {});
+  showInstallBanner();
+  setTimeout(() => recoverOffline().catch(() => {}), 1500);
 }
 
 document.getElementById('off-btn').onclick = openOfflineDialog;

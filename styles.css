@@ -277,3 +277,16 @@ header button.on, #tab-fav.on { background: #fff; color: var(--pri); }
   #cat-btn { max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
   #tab-fav, #promo-btn, #more-btn { width: 40px; padding: 0; }
 }
+
+/* Proteção do armazenamento e aviso de instalar */
+.off-storage { padding: 10px 12px; border-radius: 10px; font-size: 14px; margin: 8px 0 0; }
+.off-storage.ok { background: #dcfce7; color: #14532d; }
+.off-storage.warn { background: #fef3c7; color: #78350f; }
+#install-bar { position: fixed; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); z-index: 90;
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 12px 14px; border-radius: 12px;
+  background: var(--pri); color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.3); font-size: 14px; }
+#install-bar[hidden] { display: none; }
+#install-text { flex: 1 1 260px; }
+#install-bar button { height: 36px; padding: 0 14px; }
+#install-bar .pri { background: #fff; color: var(--pri); font-weight: 600; }
+#install-later { background: rgba(255,255,255,.15); color: #fff; }
