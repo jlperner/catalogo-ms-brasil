@@ -290,3 +290,9 @@ header button.on, #tab-fav.on { background: #fff; color: var(--pri); }
 #install-bar button { height: 36px; padding: 0 14px; }
 #install-bar .pri { background: #fff; color: var(--pri); font-weight: 600; }
 #install-later { background: rgba(255,255,255,.15); color: #fff; }
+
+/* Promoções: adicionar e mostrar ocultas */
+#promo-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+#promo-tools[hidden] { display: none; }
+#promo-tools button { height: 40px; padding: 0 16px; }
+.promo-add { background: #f97316; color: #fff; font-weight: 600; }

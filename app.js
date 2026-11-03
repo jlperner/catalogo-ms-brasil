@@ -20,7 +20,11 @@ const isPromo = (p) => p.tipo === 'promo';
 const catBooks = () => books.filter((b) => b.tipo !== 'promo');
 const promoBooks = () => books.filter((b) => b.tipo === 'promo');
 // Páginas do catálogo escolhido (ou de todos), na ordem em que o visualizador passa por elas
-const seq = () => (bookFilter === PROMO ? pages.filter(isPromo)
+// Promoções publicadas que a pessoa excluiu neste aparelho (ficam ocultas só aqui)
+let hiddenPromos = new Set();
+try { hiddenPromos = new Set(JSON.parse(localStorage.getItem('hiddenPromos') || '[]')); } catch {}
+const saveHiddenPromos = () => { try { localStorage.setItem('hiddenPromos', JSON.stringify([...hiddenPromos])); } catch {} };
+const seq = () => (bookFilter === PROMO ? pages.filter((p) => isPromo(p) && !hiddenPromos.has(pageKey(p)))
   : bookFilter ? pages.filter((p) => p.book === bookFilter)
   : pages.filter((p) => !isPromo(p)));
 
@@ -180,7 +184,19 @@ $('books-close').onclick = () => $('books-dlg').close();
 $('book-btn').onclick = (e) => { e.stopPropagation(); $('book-menu').hidden ? openBookMenu() : ($('book-menu').hidden = true); };
 document.addEventListener('click', (e) => { if (!$('book-menu').contains(e.target)) $('book-menu').hidden = true; });
 
+function renderPromoTools() {
+  const on = bookFilter === PROMO && !selecting && !picking;
+  $('promo-tools').hidden = !on;
+  if (!on) return;
+  const ocultas = pages.filter((p) => isPromo(p) && hiddenPromos.has(pageKey(p))).length;
+  $('promo-unhide').hidden = !ocultas;
+  $('promo-unhide').textContent = `Mostrar ocultas (${ocultas})`;
+}
+$('promo-add').onclick = () => $('imp-promo').click();
+$('promo-unhide').onclick = () => { hiddenPromos.clear(); saveHiddenPromos(); render(); toast('Promoções ocultas voltaram.'); };
+
 function render() {
+  renderPromoTools();
   const q = norm($('search').value.trim());
   let list = seq();
   if (mode === 'fav') list = list.filter((p) => favs.has(pageKey(p)));
@@ -258,6 +274,9 @@ function setCurrent(n) {
     ? `🔥 ${p.titulo} (${i + 1} de ${s.length})`
     : `${catBooks().length > 1 ? b.nome + ' · ' : ''}Página ${p.pn} de ${b.paginas} — ${p.titulo}`;
   $('v-fav').textContent = isFav(n) ? '★' : '☆';
+  $('v-del').hidden = !isPromo(p);
+  delete $('v-del').dataset.armed;
+  $('v-del').innerHTML = '🗑<span class="ptxt"> Excluir</span>';
   $('side-prev').disabled = i <= 0;
   $('side-next').disabled = i < 0 || i >= s.length - 1;
 }
@@ -340,6 +359,29 @@ $('v-next').onclick = () => goTo(1);
 $('side-prev').onclick = () => goTo(-1);
 $('side-next').onclick = () => goTo(1);
 $('v-fav').onclick = () => { toggleFav(current); $('v-fav').textContent = isFav(current) ? '★' : '☆'; };
+
+// 🗑 na promoção aberta: importada no aparelho → apaga de vez; publicada pelo PC → oculta neste aparelho
+$('v-del').onclick = async () => {
+  const p = pages[current - 1], b = bookOf(p), btn = $('v-del');
+  if (!btn.dataset.armed) {
+    btn.dataset.armed = '1';
+    btn.textContent = b.local ? 'Apagar de vez?' : 'Excluir deste aparelho?';
+    return;
+  }
+  if (b.local) {
+    await removeLocalBook(b.id);
+    try { localStorage.setItem('book', PROMO); } catch {}
+    location.reload();
+    return;
+  }
+  hiddenPromos.add(pageKey(p));
+  saveHiddenPromos();
+  const s = seq();
+  $('v-list').replaceChildren();
+  if (s.length) openViewer((s.find((x) => x.n > p.n) || s[s.length - 1]).n);
+  else { $('viewer').hidden = true; render(); }
+  toast(`"${p.titulo}" excluída deste aparelho. Para trazer de volta: "Mostrar ocultas".`);
+};
 
 // Deslizar para trocar de página (só sem zoom)
 let sx = null;
