@@ -193,6 +193,7 @@ function renderPromoTools() {
   $('promo-unhide').textContent = `Mostrar ocultas (${ocultas})`;
 }
 $('promo-add').onclick = () => $('imp-promo').click();
+$('promo-multi').onclick = () => startPicking(true);
 $('promo-unhide').onclick = () => { hiddenPromos.clear(); saveHiddenPromos(); render(); toast('Promoções ocultas voltaram.'); };
 
 function render() {
@@ -456,9 +457,12 @@ document.addEventListener('click', (e) => { if (!$('send-menu').contains(e.targe
 // Faixa verde: toca nas páginas (de qualquer catálogo, usando busca e 📚 à vontade) e envia tudo junto.
 // Vão num PDF só, na ordem em que foram tocadas; se forem só promoções em imagem, vão como imagens.
 let picking = null; // números (n) das páginas escolhidas, na ordem do toque
+let pickDel = false; // true = escolhendo promoções para excluir (não para enviar)
 
-function startPicking() {
+function startPicking(excluir = false) {
   if (selecting) $('edit-done').onclick();
+  pickDel = excluir;
+  document.body.classList.toggle('pick-del', excluir);
   picking = [];
   document.body.classList.add('picking');
   updatePickBar();
@@ -466,6 +470,8 @@ function startPicking() {
 }
 function stopPicking() {
   picking = null;
+  pickDel = false;
+  document.body.classList.remove('pick-del');
   document.body.classList.remove('picking');
   render();
 }
@@ -475,10 +481,16 @@ function togglePick(n) {
   updatePickBar();
 }
 function updatePickBar() {
-  $('pick-text').textContent = picking.length
+  $('pick-text').textContent = pickDel
+    ? (picking.length ? `${picking.length} promoção(ões) marcada(s) para excluir` : 'Toque nas promoções que você quer excluir.')
+    : picking.length
     ? `${picking.length} página(s) selecionada(s)`
     : 'Toque nas páginas que você quer enviar. Pode buscar e trocar de catálogo.';
-  $('pick-send').disabled = $('pick-down').disabled = $('pick-clear').disabled = !picking.length;
+  $('pick-send').disabled = $('pick-down').disabled = $('pick-clear').disabled = $('pick-del').disabled = !picking.length;
+  $('pick-send').hidden = $('pick-down').hidden = pickDel;
+  $('pick-del').hidden = !pickDel;
+  delete $('pick-del').dataset.armed;
+  $('pick-del').textContent = picking.length ? `🗑 Excluir ${picking.length}` : '🗑 Excluir';
 }
 async function pickedFiles() {
   const ps = picking.map((n) => pages[n - 1]);
@@ -536,6 +548,24 @@ $('pick-go').onclick = async () => {
 };
 $('pick-clear').onclick = () => { picking = []; updatePickBar(); render(); };
 $('pick-cancel').onclick = stopPicking;
+
+// Excluir várias promoções: importadas no aparelho são apagadas de vez; publicadas ficam ocultas neste aparelho
+$('pick-del').onclick = async () => {
+  const btn = $('pick-del');
+  if (!btn.dataset.armed) { btn.dataset.armed = '1'; btn.textContent = `Confirmar: excluir ${picking.length}?`; return; }
+  const ps = picking.map((n) => pages[n - 1]).filter(isPromo);
+  const locais = new Set(ps.filter((p) => bookOf(p).local).map((p) => bookOf(p).id));
+  for (const p of ps) if (!bookOf(p).local) hiddenPromos.add(pageKey(p));
+  saveHiddenPromos();
+  if (locais.size) {
+    for (const id of locais) await removeLocalBook(id);
+    try { localStorage.setItem('book', PROMO); } catch {}
+    location.reload();
+    return;
+  }
+  stopPicking();
+  toast(`${ps.length} promoção(ões) excluída(s) deste aparelho. Para trazer de volta: "Mostrar ocultas".`);
+};
 
 const asPdf = (blob, name) => new File([blob], name.replace(/[\\/:*?"<>|]/g, '-'), { type: 'application/pdf' });
 
