@@ -17,6 +17,10 @@ const pageKey = (p) => `${p.book}:${p.pn}`;
 // Promoções são catálogos do tipo "promo": ficam fora de "Todos os catálogos" e abrem pelo botão 🔥
 const PROMO = '__promo';
 const isPromo = (p) => p.tipo === 'promo';
+// Promoção = um arquivo (PDF com várias páginas aparece como um cartão só; ao abrir, mostra as páginas)
+const grupoDe = (p) => (p.grupo ? pages.filter((x) => x.grupo === p.grupo) : [p]);
+const umPorGrupo = (list) => { const vistos = new Set(); return list.filter((p) => !p.grupo || (!vistos.has(p.grupo) && vistos.add(p.grupo))); };
+const contaGrupos = (list) => umPorGrupo(list).length;
 const catBooks = () => books.filter((b) => b.tipo !== 'promo');
 const promoBooks = () => books.filter((b) => b.tipo === 'promo');
 // Páginas do catálogo escolhido (ou de todos), na ordem em que o visualizador passa por elas
@@ -64,6 +68,8 @@ async function init() {
         pages.push({
           n: pages.length + 1, book: book.id, tipo: book.tipo || '', arquivo: p.arquivo,
           pn: p.pn, titulo: p.titulo, texto: p.texto,
+          grupo: book.tipo === 'promo' ? (book.local ? book.id : `${book.id}:${p.grupo ?? 'p' + p.pn}`) : null,
+          nome: p.nome || (book.local ? book.nome : p.titulo),
           ntitulo: norm(p.titulo).replace(/[^a-z0-9]+/g, ' '), ntexto: norm(p.texto),
         });
       }
@@ -188,7 +194,7 @@ function renderPromoTools() {
   const on = bookFilter === PROMO && !selecting && !picking;
   $('promo-tools').hidden = !on;
   if (!on) return;
-  const ocultas = pages.filter((p) => isPromo(p) && hiddenPromos.has(pageKey(p))).length;
+  const ocultas = contaGrupos(pages.filter((p) => isPromo(p) && hiddenPromos.has(pageKey(p))));
   $('promo-unhide').hidden = !ocultas;
   $('promo-unhide').textContent = `Mostrar ocultas (${ocultas})`;
 }
@@ -208,6 +214,7 @@ function render() {
   if (q) list = list.filter((p) => q.split(/\s+/).every((w) =>
     conteudo ? (p.ntitulo + ' ' + p.ntexto).includes(w)
              : (/\d/.test(w) ? ' ' + p.ntexto : ' ' + p.ntitulo).includes(' ' + w)));
+  if (bookFilter === PROMO) list = umPorGrupo(list);
   const un = bookFilter === PROMO ? ['promoção(ões)', 'promoções'] : ['página(s)', 'páginas'];
   $('status').textContent = q || mode === 'fav' || catFilter ? `${list.length} ${un[0]} encontrada(s)` : `${list.length} ${un[1]}`;
 
@@ -226,7 +233,7 @@ function render() {
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `<img loading="lazy" src="${miniUrl(p.n)}" alt="">
-      <div class="info">${isPromo(p) ? `<b>${esc(p.titulo)}</b>` : `<b>Pág. ${p.pn}</b> ${esc(p.titulo)}`}${showBook ? `<div class="book">${esc(bookOf(p).nome)}</div>` : ''}${q ? `<div class="snip">${snippet(p, q)}</div>` : ''}</div>`;
+      <div class="info">${isPromo(p) ? `<b>${esc(p.nome)}</b>${grupoDe(p).length > 1 ? `<div class="book">📄 ${grupoDe(p).length} páginas</div>` : ''}` : `<b>Pág. ${p.pn}</b> ${esc(p.titulo)}`}${showBook ? `<div class="book">${esc(bookOf(p).nome)}</div>` : ''}${q ? `<div class="snip">${snippet(p, q)}</div>` : ''}</div>`;
     const star = document.createElement('button');
     star.className = 'star';
     star.textContent = isFav(p.n) ? '★' : '☆';
@@ -239,7 +246,10 @@ function render() {
     card.append(star);
     if (picking) {
       card.classList.toggle('sel', picking.includes(p.n));
-      card.onclick = () => { togglePick(p.n); card.classList.toggle('sel', picking.includes(p.n)); };
+      card.onclick = () => {
+        if (isPromo(p)) togglePickGrupo(p); else togglePick(p.n);
+        card.classList.toggle('sel', picking.includes(p.n));
+      };
     } else if (selecting) {
       card.classList.toggle('sel', !!editing && catPages(editing).has(p.n));
       card.onclick = () => {
@@ -271,8 +281,9 @@ try { leitura = localStorage.getItem('leitura') || 'uma'; } catch {}
 function setCurrent(n) {
   current = n;
   const p = pages[n - 1], b = bookOf(p), s = seq(), i = s.indexOf(p);
+  const g = grupoDe(p);
   $('v-title').textContent = isPromo(p)
-    ? `🔥 ${p.titulo} (${i + 1} de ${s.length})`
+    ? `🔥 ${p.nome}${g.length > 1 ? ` — página ${g.indexOf(p) + 1} de ${g.length}` : ''}`
     : `${catBooks().length > 1 ? b.nome + ' · ' : ''}Página ${p.pn} de ${b.paginas} — ${p.titulo}`;
   $('v-fav').textContent = isFav(n) ? '★' : '☆';
   $('v-del').hidden = !isPromo(p);
@@ -375,13 +386,14 @@ $('v-del').onclick = async () => {
     location.reload();
     return;
   }
-  hiddenPromos.add(pageKey(p));
+  const g = grupoDe(p);
+  for (const x of g) hiddenPromos.add(pageKey(x));
   saveHiddenPromos();
-  const s = seq();
+  const s = seq(), ultimo = g[g.length - 1].n;
   $('v-list').replaceChildren();
-  if (s.length) openViewer((s.find((x) => x.n > p.n) || s[s.length - 1]).n);
+  if (s.length) openViewer((s.find((x) => x.n > ultimo) || s[s.length - 1]).n);
   else { $('viewer').hidden = true; render(); }
-  toast(`"${p.titulo}" excluída deste aparelho. Para trazer de volta: "Mostrar ocultas".`);
+  toast(`"${p.nome}" excluída deste aparelho. Para trazer de volta: "Mostrar ocultas".`);
 };
 
 // Deslizar para trocar de página (só sem zoom)
@@ -396,10 +408,14 @@ $('v-wrap').addEventListener('touchend', (e) => {
 
 const label = () => {
   const p = pages[current - 1];
-  return isPromo(p) ? `Promoção MS Brasil: ${p.titulo}` : `${p.titulo} — página ${p.pn} do catálogo ${bookOf(p).nome}`;
+  return isPromo(p) ? `Promoção MS Brasil: ${p.nome}` : `${p.titulo} — página ${p.pn} do catálogo ${bookOf(p).nome}`;
 };
 // Arquivo da página para enviar/baixar. Promoção em imagem vai como imagem; o resto como PDF.
-const pageFile = () => pageFileFor(current);
+const pageFile = async () => {
+  const g = grupoDe(pages[current - 1]);
+  if (g.length > 1) return asPdf(await pagesPdf(g.map((x) => x.n)), g[0].nome.replace(/[\\/:*?"<>|]/g, '-') + '.pdf');
+  return pageFileFor(current);
+};
 async function pageFileFor(n) {
   const p = pages[n - 1];
   const blob = await pageBlob(n);
@@ -480,9 +496,16 @@ function togglePick(n) {
   if (i >= 0) picking.splice(i, 1); else picking.push(n);
   updatePickBar();
 }
+function togglePickGrupo(p) {
+  const ns = grupoDe(p).map((x) => x.n);
+  if (picking.includes(p.n)) picking = picking.filter((n) => !ns.includes(n));
+  else picking.push(...ns.filter((n) => !picking.includes(n)));
+  updatePickBar();
+}
 function updatePickBar() {
+  const nDel = contaGrupos(picking.map((n) => pages[n - 1]));
   $('pick-text').textContent = pickDel
-    ? (picking.length ? `${picking.length} promoção(ões) marcada(s) para excluir` : 'Toque nas promoções que você quer excluir.')
+    ? (picking.length ? `${nDel} promoção(ões) marcada(s) para excluir` : 'Toque nas promoções que você quer excluir.')
     : picking.length
     ? `${picking.length} página(s) selecionada(s)`
     : 'Toque nas páginas que você quer enviar. Pode buscar e trocar de catálogo.';
@@ -490,7 +513,7 @@ function updatePickBar() {
   $('pick-send').hidden = $('pick-down').hidden = pickDel;
   $('pick-del').hidden = !pickDel;
   delete $('pick-del').dataset.armed;
-  $('pick-del').textContent = picking.length ? `🗑 Excluir ${picking.length}` : '🗑 Excluir';
+  $('pick-del').textContent = picking.length ? `🗑 Excluir ${nDel}` : '🗑 Excluir';
 }
 async function pickedFiles() {
   const ps = picking.map((n) => pages[n - 1]);
@@ -552,8 +575,9 @@ $('pick-cancel').onclick = stopPicking;
 // Excluir várias promoções: importadas no aparelho são apagadas de vez; publicadas ficam ocultas neste aparelho
 $('pick-del').onclick = async () => {
   const btn = $('pick-del');
-  if (!btn.dataset.armed) { btn.dataset.armed = '1'; btn.textContent = `Confirmar: excluir ${picking.length}?`; return; }
+  if (!btn.dataset.armed) { btn.dataset.armed = '1'; btn.textContent = `Confirmar: excluir ${contaGrupos(picking.map((n) => pages[n - 1]))}?`; return; }
   const ps = picking.map((n) => pages[n - 1]).filter(isPromo);
+  const nGrupos = contaGrupos(ps);
   const locais = new Set(ps.filter((p) => bookOf(p).local).map((p) => bookOf(p).id));
   for (const p of ps) if (!bookOf(p).local) hiddenPromos.add(pageKey(p));
   saveHiddenPromos();
@@ -564,7 +588,7 @@ $('pick-del').onclick = async () => {
     return;
   }
   stopPicking();
-  toast(`${ps.length} promoção(ões) excluída(s) deste aparelho. Para trazer de volta: "Mostrar ocultas".`);
+  toast(`${nGrupos} promoção(ões) excluída(s) deste aparelho. Para trazer de volta: "Mostrar ocultas".`);
 };
 
 const asPdf = (blob, name) => new File([blob], name.replace(/[\\/:*?"<>|]/g, '-'), { type: 'application/pdf' });
