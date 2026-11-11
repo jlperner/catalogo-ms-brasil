@@ -195,7 +195,7 @@ function renderPromoTools() {
   $('promo-tools').hidden = !on;
   if (!on) return;
   const ocultas = contaGrupos(pages.filter((p) => isPromo(p) && hiddenPromos.has(pageKey(p))));
-  $('promo-unhide').hidden = !ocultas;
+  $('promo-unhide').hidden = true; // excluir é excluir: sem "mostrar ocultas"
   $('promo-unhide').textContent = `Mostrar ocultas (${ocultas})`;
 }
 $('promo-add').onclick = () => $('imp-promo').click();
@@ -377,7 +377,7 @@ $('v-del').onclick = async () => {
   const p = pages[current - 1], b = bookOf(p), btn = $('v-del');
   if (!btn.dataset.armed) {
     btn.dataset.armed = '1';
-    btn.textContent = b.local ? 'Apagar de vez?' : 'Excluir deste aparelho?';
+    btn.textContent = 'Confirmar exclusão?';
     return;
   }
   if (b.local) {
@@ -393,7 +393,7 @@ $('v-del').onclick = async () => {
   $('v-list').replaceChildren();
   if (s.length) openViewer((s.find((x) => x.n > ultimo) || s[s.length - 1]).n);
   else { $('viewer').hidden = true; render(); }
-  toast(`"${p.nome}" excluída deste aparelho. Para trazer de volta: "Mostrar ocultas".`);
+  toast(`"${p.nome}" excluída.`);
 };
 
 // Deslizar para trocar de página (só sem zoom)
@@ -588,7 +588,7 @@ $('pick-del').onclick = async () => {
     return;
   }
   stopPicking();
-  toast(`${nGrupos} promoção(ões) excluída(s) deste aparelho. Para trazer de volta: "Mostrar ocultas".`);
+  toast(`${nGrupos} promoção(ões) excluída(s).`);
 };
 
 const asPdf = (blob, name) => new File([blob], name.replace(/[\\/:*?"<>|]/g, '-'), { type: 'application/pdf' });
