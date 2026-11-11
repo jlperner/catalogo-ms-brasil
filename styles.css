@@ -296,3 +296,5 @@ header button.on, #tab-fav.on { background: #fff; color: var(--pri); }
 #promo-tools[hidden] { display: none; }
 #promo-tools button { height: 40px; padding: 0 16px; }
 .promo-add { background: #f97316; color: #fff; font-weight: 600; }
+
+#send-menu .menu-title { padding: 6px 10px; font-weight: 600; color: #555; }

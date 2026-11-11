@@ -450,7 +450,16 @@ function openSendMenu(btn, acao) {
   const menu = $('send-menu');
   setTimeout(() => (menu.hidden = false)); // abre depois do clique que fechou o ⋯
   menu.replaceChildren(
-    button('📘 Catálogo inteiro', '', () => { menu.hidden = true; wholeCatalog(acao); }),
+    button('📘 Catálogo inteiro…', '', () => {
+      // seletor: um botão por catálogo
+      const cb = catBooks();
+      if (cb.length === 1) { menu.hidden = true; return wholeCatalog(acao, cb[0]); }
+      menu.replaceChildren(
+        Object.assign(document.createElement('div'), { className: 'menu-title', textContent: acao === 'enviar' ? 'Qual catálogo enviar?' : 'Qual catálogo baixar?' }),
+        ...cb.map((b) => button(`📘 ${b.nome}`, b.id === bookFilter ? 'on' : '', () => { menu.hidden = true; wholeCatalog(acao, b); })),
+      );
+      setTimeout(() => (menu.hidden = false)); // o clique que trocou a lista não fecha o menu
+    }),
     button('✔ Escolher páginas…', '', () => { menu.hidden = true; startPicking(); }),
   );
   const r = btn.getBoundingClientRect();
@@ -458,8 +467,8 @@ function openSendMenu(btn, acao) {
   menu.style.left = Math.max(8, Math.min(r.right - 240, innerWidth - 248)) + 'px';
   menu.hidden = false;
 }
-async function wholeCatalog(acao) {
-  const b = chosenBook();
+async function wholeCatalog(acao, escolhido) {
+  const b = escolhido || chosenBook();
   if (!b) return;
   $('status').textContent = acao === 'enviar' ? 'Preparando catálogo…' : 'Baixando catálogo…';
   const f = asPdf(await catalogBlob(b.id), b.nome + '.pdf');
