@@ -450,16 +450,7 @@ function openSendMenu(btn, acao) {
   const menu = $('send-menu');
   setTimeout(() => (menu.hidden = false)); // abre depois do clique que fechou o ⋯
   menu.replaceChildren(
-    button('📘 Catálogo inteiro…', '', () => {
-      // seletor: um botão por catálogo
-      const cb = catBooks();
-      if (cb.length === 1) { menu.hidden = true; return wholeCatalog(acao, cb[0]); }
-      menu.replaceChildren(
-        Object.assign(document.createElement('div'), { className: 'menu-title', textContent: acao === 'enviar' ? 'Qual catálogo enviar?' : 'Qual catálogo baixar?' }),
-        ...cb.map((b) => button(`📘 ${b.nome}`, b.id === bookFilter ? 'on' : '', () => { menu.hidden = true; wholeCatalog(acao, b); })),
-      );
-      setTimeout(() => (menu.hidden = false)); // o clique que trocou a lista não fecha o menu
-    }),
+    button('📘 Catálogo inteiro…', '', () => { menu.hidden = true; openCatSend(acao); }),
     button('✔ Escolher páginas…', '', () => { menu.hidden = true; startPicking(); }),
   );
   const r = btn.getBoundingClientRect();
@@ -467,6 +458,39 @@ function openSendMenu(btn, acao) {
   menu.style.left = Math.max(8, Math.min(r.right - 240, innerWidth - 248)) + 'px';
   menu.hidden = false;
 }
+// Seletor de catálogos para enviar/baixar inteiros (pode marcar vários)
+function openCatSend(acao) {
+  const cb = catBooks();
+  if (cb.length === 1) return wholeCatalog(acao, cb[0]);
+  $('cs-title').textContent = acao === 'enviar' ? 'Quais catálogos enviar?' : 'Quais catálogos baixar?';
+  const box = $('cs-list');
+  box.replaceChildren(...cb.map((b) => {
+    const row = document.createElement('label');
+    row.className = 'cs-row';
+    row.innerHTML = `<input type="checkbox" value="${esc(b.id)}"${b.id === bookFilter ? ' checked' : ''}><span>📘 ${esc(b.nome)}</span>`;
+    return row;
+  }));
+  const upd = () => {
+    const n = box.querySelectorAll('input:checked').length;
+    $('cs-go').disabled = !n;
+    $('cs-go').textContent = (acao === 'enviar' ? '↗ Enviar' : '⬇ Baixar') + (n ? ` ${n}` : '');
+  };
+  box.onchange = upd; upd();
+  $('cs-go').onclick = async () => {
+    const escolhidos = [...box.querySelectorAll('input:checked')].map((c) => bookById(c.value));
+    $('cs-dlg').close();
+    $('status').textContent = acao === 'enviar' ? 'Preparando catálogo(s)…' : 'Baixando catálogo(s)…';
+    const files = [];
+    for (const b of escolhidos) files.push(asPdf(await catalogBlob(b.id), b.nome + '.pdf'));
+    render();
+    if (acao === 'baixar') return files.forEach(download);
+    if (!navigator.canShare || !navigator.canShare({ files })) return toast('Este aparelho não permite compartilhar arquivos. Use "Baixar".');
+    try { await navigator.share({ files, text: escolhidos.map((b) => b.nome).join(String.fromCharCode(10)) }); } catch {}
+  };
+  $('cs-dlg').showModal();
+}
+$('cs-cancel').onclick = () => $('cs-dlg').close();
+
 async function wholeCatalog(acao, escolhido) {
   const b = escolhido || chosenBook();
   if (!b) return;
